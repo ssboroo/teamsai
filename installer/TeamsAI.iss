@@ -1,7 +1,7 @@
 [Setup]
 AppId=TeamsAI.Local.Windows
 AppName=TeamsAI
-AppVersion=1.0.0
+AppVersion=1.1.0
 DefaultDirName={localappdata}\Programs\TeamsAI
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible

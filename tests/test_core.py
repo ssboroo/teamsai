@@ -1,7 +1,7 @@
 import json, tempfile, unittest
 from pathlib import Path
 from unittest.mock import patch
-from core import clean, Deduper, LawIndex, local_chat
+from core import clean, Deduper, LawIndex, local_chat, choices
 class Tests(unittest.TestCase):
     def test_cyrillic(self):self.assertEqual(clean('  Монгол   Ө Ү\n\n хууль '),'Монгол Ө Ү\nхууль')
     def test_duplicate(self):
@@ -41,6 +41,9 @@ class Tests(unittest.TestCase):
             req=opener.open.call_args.args[0]
             self.assertEqual(req.get_header('Authorization'),'Bearer test-token')
             self.assertFalse(json.loads(req.data)['chat_template_kwargs']['enable_thinking'])
+    def test_option_labels(self):
+        self.assertEqual(choices('Асуулт 1.2 юу вэ?\nA. Нэг\nB) Хоёр\nC: Гурав'),['A','B','C'])
+        self.assertEqual(choices('2+2 хэд вэ?'),[])
     def test_invalid_model(self):
         with self.assertRaises(ValueError):local_chat('bad model','q',[])
 if __name__=='__main__':unittest.main()
