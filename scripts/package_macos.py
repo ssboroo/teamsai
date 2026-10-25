@@ -1,4 +1,4 @@
-import hashlib,json,platform,shutil,subprocess
+import hashlib,json,platform,shutil,subprocess,plistlib
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];arch='arm64' if platform.machine()=='arm64' else 'x64';out=ROOT/'output';out.mkdir(exist_ok=True)
 app=ROOT/'dist/TeamsAI.app';assets=app/'Contents/Resources/assets';shutil.copytree(ROOT/'assets',assets,dirs_exist_ok=True)
@@ -8,7 +8,9 @@ subprocess.run(['codesign','--verify','--deep','--strict',str(app)],check=True)
 subprocess.run([str(app/'Contents/MacOS/TeamsAI'),'--self-test'],check=True,timeout=300)
 stage=ROOT/'package-root';stage.mkdir(exist_ok=True);shutil.copytree(app,stage/'TeamsAI.app',dirs_exist_ok=True,symlinks=True)
 pkg=out/f'TeamsAI-{arch}.pkg'
-subprocess.run(['pkgbuild','--root',str(stage),'--identifier','studio.rainy.teamsai','--version','1.2.0','--install-location','/Applications',str(pkg)],check=True)
+component=ROOT/'components.plist'
+component.write_bytes(plistlib.dumps([{'RootRelativeBundlePath':'TeamsAI.app','BundleIsRelocatable':False,'BundleIsVersionChecked':False,'BundleHasStrictIdentifier':True,'BundleOverwriteAction':'upgrade'}]))
+subprocess.run(['pkgbuild','--root',str(stage),'--component-plist',str(component),'--identifier','studio.rainy.teamsai','--version','1.2.0','--install-location','/Applications',str(pkg)],check=True)
 # GitHub release assets have a per-file size ceiling. Keep every download below 1.5GB.
 h=hashlib.sha256();parts=[]
 with pkg.open('rb') as src:
