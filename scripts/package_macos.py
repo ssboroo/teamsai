@@ -11,7 +11,7 @@ stage=ROOT/'package-root';stage.mkdir(exist_ok=True);shutil.copytree(app,stage/'
 pkg=out/f'BORO-{arch}.pkg'
 component=ROOT/'components.plist'
 component.write_bytes(plistlib.dumps([{'RootRelativeBundlePath':'BORO.app','BundleIsRelocatable':False,'BundleIsVersionChecked':False,'BundleHasStrictIdentifier':True,'BundleOverwriteAction':'upgrade'}]))
-subprocess.run(['pkgbuild','--root',str(stage),'--component-plist',str(component),'--identifier','studio.rainy.boro','--version','1.3.0','--install-location','/Applications',str(pkg)],check=True)
+subprocess.run(['pkgbuild','--root',str(stage),'--component-plist',str(component),'--identifier','studio.rainy.boro','--version','1.4.0','--install-location','/Applications',str(pkg)],check=True)
 # GitHub release assets have a per-file size ceiling. Keep every download below 1.5GB.
 h=hashlib.sha256();parts=[]
 with pkg.open('rb') as src:

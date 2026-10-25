@@ -16,11 +16,11 @@ try:
         start=time.monotonic();row={'expected':expected}
         try:
             first,conf=recognize(image,tesseract());time.sleep(3)
-            second,conf2=recognize(image,tesseract());q=parse_quiz(second)
+            second,conf2=recognize(image,tesseract());row['synthetic_ocr_text']=second;q=parse_quiz(second)
             if parse_quiz(first).text!=q.text:raise ValueError('OCR unstable')
             answer=suggest_quiz(q,engine,[],start+30)
             row.update(correct=('Хариулт: '+expected+' —') in answer,ocr_confidence=min(conf,conf2))
-        except Exception as exc:row.update(correct=False,error=type(exc).__name__)
+        except Exception as exc:row.update(correct=False,error=type(exc).__name__,detail=str(exc)[:240])
         row['seconds']=round(time.monotonic()-start,3);row['within_30s']=row['seconds']<30;rows.append(row)
 finally:engine.stop()
 report={'scope':'Synthetic rendered text, warm loaded model, two OCR passes plus 3s stability interval; no real Teams screen detection; 2 examples only.','cases':rows,'all_correct_and_under_30s':all(r['correct'] and r['within_30s'] for r in rows)}

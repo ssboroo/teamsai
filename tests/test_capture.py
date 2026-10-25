@@ -28,4 +28,7 @@ class WindowsCaptureTests(unittest.TestCase):
                 self.assertLessEqual(app.footer.winfo_y()+app.footer.winfo_height(),root.winfo_height())
                 app.capture_options();root.update()
                 self.assertTrue(root.winfo_exists())
+                app.busy=False;app.options();root.update()
+                settings=[c for c in root.winfo_children() if isinstance(c,tk.Toplevel) and c.title()=='BORO • Settings']
+                self.assertEqual(len(settings),1)
             finally:app.close()
