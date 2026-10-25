@@ -1,0 +1,50 @@
+name: Windows • Бүрэн суулгагч
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  installer:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: x64
+      - name: Build tools (users do not install these)
+        shell: pwsh
+        run: |
+          choco install tesseract innosetup -y --no-progress
+          if ($LASTEXITCODE -notin @(0,3010)) { throw 'Build tools failed' }
+      - name: Mongolian installer language
+        shell: pwsh
+        run: ./scripts/installer_language.ps1
+      - name: Bundle model, OCR, runtime; real smoke; build
+        shell: pwsh
+        run: ./build.ps1
+      - name: Silent install and installed smoke
+        shell: pwsh
+        run: |
+          $p=Start-Process output/TeamsAI-Setup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/DIR=C:\TeamsAI-Test','/LOG=install.log' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw 'Silent installer failed' }
+          $p=Start-Process C:/TeamsAI-Test/TeamsAI.exe -ArgumentList '--self-test' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw 'Installed smoke failed' }
+          $p=Start-Process C:/TeamsAI-Test/unins000.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw 'Uninstall failed' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TeamsAI-Windows-Installer
+          path: output/*
+          compression-level: 0
+          retention-days: 14
+      - name: Publish verified build
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag='build-${{ github.run_number }}'
+          gh release create $tag output/* --title "TeamsAI Windows $tag" --notes "Бүрэн багц: Python runtime, Tesseract mon+eng, llama.cpp CPU, Qwen3 4B. Бүх файлыг нэг хавтаст татаж TeamsAI-Setup.exe ажиллуулна. Windows automated OCR/AI, frozen app, silent install/uninstall checks passed. Real Teams/manual acceptance and Mongolian law accuracy remain unvalidated."

@@ -1,0 +1,8 @@
+__pycache__/
+.venv/
+assets/
+dist/
+build/
+output/
+*.spec
+installer/Mongolian.isl
