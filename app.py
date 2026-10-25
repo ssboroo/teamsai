@@ -3,7 +3,7 @@ from tkinter import filedialog, messagebox
 from pathlib import Path
 from core import clean, Deduper, LawIndex, local_chat
 from runtime import Engine, ROOT, tesseract
-DATA=Path(os.environ.get('LOCALAPPDATA',str(Path.home())))/'TeamsAI';DATA.mkdir(parents=True,exist_ok=True);(DATA/'laws').mkdir(exist_ok=True)
+DATA=(Path.home()/'Library/Application Support/TeamsAI') if sys.platform=='darwin' else Path(os.environ.get('LOCALAPPDATA',str(Path.home())))/'TeamsAI';DATA.mkdir(parents=True,exist_ok=True);(DATA/'laws').mkdir(exist_ok=True)
 BG='#10151f';CARD='#1b2331';FG='#ecf2ff';MUTED='#a6b5cc';ACCENT='#74ebc2'
 class App:
     def __init__(self,root):
@@ -54,7 +54,10 @@ class App:
         threading.Thread(target=run,daemon=True).start()
     def drain(self):
         try:
-            tag,value,epoch=self.q.get_nowait();self.busy=False
+            tag,value,epoch=self.q.get_nowait()
+            if tag=='show':
+                self.root.deiconify();self.root.after(100,self.drain);return
+            self.busy=False
             if tag=='ready':self.ready=True;self.status.set('Бэлэн. Асуултын хэсгээ сонгоод Эхлэх дарна уу.')
             elif tag=='error':self.status.set('Алдаа: '+value[2]);self.audit('error',stage=value[0],kind=value[1])
             elif epoch==self.generation and self.running:
@@ -107,6 +110,10 @@ class App:
     def toggle(self):
         if self.running:
             self.running=False;self.generation+=1;self.start_button.config(text='▶ Эхлэх');self.status.set('Зогссон');return
+        if sys.platform=='darwin':
+            from capture import screen_permission
+            if not screen_permission(request=True):
+                self.status.set('Screen Recording зөвшөөрөл өгөөд программаа дахин нээнэ үү.');return
         if not self.ready:self.status.set('AI модель ачаалж дуустал хүлээнэ үү.');return
         if self.mode.get()=='region' and not self.region:self.select();return
         if self.mode.get()=='window' and not self.hwnd:self.capture_options();return
@@ -121,10 +128,15 @@ class App:
             def capture():
                 from capture import grab
                 from ocr import recognize
-                t=time.monotonic();image=grab(mode,box,hwnd)
+                t=time.monotonic()
+                try:image=grab(mode,box,hwnd)
+                finally:
+                    if sys.platform=='darwin' and mode=='screen':self.q.put(('show',None,epoch))
                 text,confidence=recognize(image,tesseract())
                 return clean(text),confidence,time.monotonic()-t
-            self.worker('ocr',capture,epoch)
+            if sys.platform=='darwin' and mode=='screen':
+                self.busy=True;self.root.withdraw();self.root.after(180,lambda:self.worker('ocr',capture,epoch))
+            else:self.worker('ocr',capture,epoch)
         self.root.after(max(1,self.interval.get())*1000,lambda:self.tick(epoch))
     def copy(self):
         text=self.answer.get('1.0','end').strip()
@@ -140,7 +152,7 @@ class App:
             self.mode.set(mode);self.mode_label.set('Унших: '+label);self.hwnd=hwnd;self.last='';w.destroy()
             if mode=='region':self.select()
         self.button(w,'Дэлгэцийн хэсэг — хурдан',lambda:choose('region','хэсэг')).pack(fill='x',padx=14,pady=8)
-        self.button(w,'Бүтэн дэлгэц — бүх монитор',lambda:choose('screen','бүтэн дэлгэц')).pack(fill='x',padx=14,pady=4)
+        self.button(w,('Бүтэн дэлгэц — үндсэн монитор' if sys.platform=='darwin' else 'Бүтэн дэлгэц — бүх монитор'),lambda:choose('screen','бүтэн дэлгэц')).pack(fill='x',padx=14,pady=4)
         tk.Label(w,text='Программын цонх / харагдаж буй browser tab:',bg=BG,fg=FG).pack(pady=8)
         rows=windows();listing=tk.Listbox(w,bg=CARD,fg=FG,font=('Segoe UI',10));listing.pack(fill='both',expand=True,padx=14)
         for _,title in rows:listing.insert('end',title)
@@ -174,7 +186,7 @@ def self_test():
     from PIL import Image,ImageDraw,ImageFont
     from ocr import recognize
     image=Image.new('RGB',(1000,200),'white');draw=ImageDraw.Draw(image)
-    font=ImageFont.truetype('C:/Windows/Fonts/arial.ttf',36)
+    font=ImageFont.truetype('/System/Library/Fonts/Supplemental/Arial.ttf' if sys.platform=='darwin' else 'C:/Windows/Fonts/arial.ttf',36)
     draw.text((20,20),'Монгол Улс Ө Ү хууль 123',font=font,fill='black')
     text,conf=recognize(image,tesseract(),budget=20)
     if 'Монгол' not in text or conf<40:raise RuntimeError('OCR smoke failed: '+text)

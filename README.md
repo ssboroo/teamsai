@@ -36,3 +36,14 @@ GitHub Actions дарааллаар unit tests, бодит synthetic Mongolian O
 - **Бүтэн дэлгэц:** бүх мониторын харагдах пикселийг уншина. Өөрийн TeamsAI цонхыг Windows capture exclusion-аар хасна; хасах боломжгүй системд энэ горимыг зогсоож хэсэг сонгохыг санал болгоно. Их тексттэй үед удаан/буруу асуулт унших эрсдэлтэй.
 
 Browser-ийн зөвхөн харагдаж буй tab уншигдана. Далд tab, minimize цонх, халхлагдсан browser-ийг DOM/accessibility API-р унших боломж хэрэгжүүлээгүй. Тестийн хариуны `Хариулт:` мөрийг томоор үзүүлнэ; AI-ийн сонголт зөв гэсэн баталгаа биш. Таймер өөрчлөгдөх зэрэг OCR текст тогтворгүй бол автоматаар хариулахгүй тул асуулт/сонголтоор хүрээлнэ.
+
+## macOS — Windows-ийг орлуулахгүй нэмэлт хувилбар
+Apple Silicon (arm64) болон Intel (x64) тусдаа багцтай. Python, Tesseract mon+eng, локал Qwen модель, native dylib-ууд .app-д багтана. Windows-ийн `build-*` releases хэвээр; Mac-ийн `mac-arm64-*`, `mac-x64-*` tags тусдаа.
+
+Releases дахь өөрийн архитектурын бүх `.pkg.partNN`, `Install-TeamsAI-ARCH.command`-ийг нэг хавтаст татаж command-г ажиллуулна. Энэ нь хэсгүүдийг нэгтгэж SHA256 шалгаад macOS Installer нээнэ. Downloaded command executable биш бол Terminal-д `chmod +x` өгч болно. Эсвэл Actions artifact ZIP-ийг задлаад доторх бүтэн `.pkg`-г шууд нээнэ. Админ зөвшөөрөл /Applications-д суулгахад хэрэгтэй.
+
+**System Settings → Privacy & Security → Screen Recording / Screen & System Audio Recording** хэсэгт TeamsAI-г зөвшөөрөөд аппыг дахин нээнэ. Энэ нь macOS-ийн зөвшөөрөл; программаас тойрохгүй. Mac дээр бүтэн дэлгэц үндсэн мониторынх; app цонх capture хийх агшинд богинохон нуугдаж буцна. Цонх сонгох, дэлгэцийн хэсэг сонгох боломжтой. Харагдаагүй browser tab уншихгүй.
+
+Ad-hoc signing нь Developer ID signing болон Apple notarization биш. Gatekeeper автоматаар итгэх баталгаа байхгүй; эх сурвалжийг нягталж macOS-ийн ердийн зөвшөөрлийн урсгалаар нээнэ. Энд Gatekeeper/TCC-г унтраадаг арга агуулаагүй. `~/Library/Application Support/TeamsAI` дотор тохиргоо, хууль, audit хадгална. Устгахдаа Applications-аас TeamsAI.app-ийг хогийн саванд хийнэ. Модель болон сангийн чанар/хурдны хязгаарлалтууд Windows-тэй адил.
+
+Mac workflow нь package бүтээх, synthetic Монгол OCR, локал модель, frozen app болон суусан .app smoke-ийг шалгана. Screen Recording permission, Retina/multi-monitor, бодит Teams UI-г хэрэглэгчийн Mac дээр хүн шалгах шаардлагатай. CI-ийн амжилт нь эдгээрийг шалгасан гэсэн үг биш.
