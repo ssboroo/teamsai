@@ -15,8 +15,8 @@ try:
         image=Image.new('RGB',(1400,330),'white');ImageDraw.Draw(image).multiline_text((20,20),text,font=font,fill='black',spacing=10)
         start=time.monotonic();row={'expected':expected}
         try:
-            first,conf=recognize(image,tesseract());time.sleep(3)
-            second,conf2=recognize(image,tesseract());row['synthetic_ocr_text']=second;q=parse_quiz(second)
+            first,conf=recognize(image,tesseract(),quiz_mode=True);time.sleep(3)
+            second,conf2=recognize(image,tesseract(),quiz_mode=True);row['synthetic_ocr_text']=second;q=parse_quiz(second)
             if parse_quiz(first).text!=q.text:raise ValueError('OCR unstable')
             answer=suggest_quiz(q,engine,[],start+30)
             row.update(correct=('Хариулт: '+expected+' —') in answer,ocr_confidence=min(conf,conf2))

@@ -1,12 +1,19 @@
 import time
 from PIL import ImageOps, ImageFilter
 
-def recognize(image, command, budget=6):
+def recognize(image, command, budget=6, quiz_mode=False):
     import pytesseract
     pytesseract.pytesseract.tesseract_cmd=command
     langs=pytesseract.get_languages(config='')
     if not {'mon','eng'}.issubset(langs): raise RuntimeError('Tesseract mon + eng traineddata суулгаагүй байна.')
     started=time.monotonic(); best=('',0,[])
+    def quality(result):
+        complete=True
+        if quiz_mode:
+            from quiz import parse_quiz
+            try:parse_quiz(result[0])
+            except ValueError:complete=False
+        return complete,result[1]
     # First pass preserves light/dark UI; second pass boosts small Cyrillic glyphs.
     gray=ImageOps.grayscale(image)
     variants=[(image,6),(ImageOps.autocontrast(gray).resize((image.width*2,image.height*2)).filter(ImageFilter.SHARPEN),6)]
@@ -25,8 +32,8 @@ def recognize(image, command, budget=6):
             k=(d['block_num'][i],d['par_num'][i],d['line_num'][i]); lines.setdefault(k,[]).append(w)
             conf.append(c); boxes.append((d['left'][i],d['top'][i],d['width'][i],d['height'][i]))
         result=('\n'.join(' '.join(v) for v in lines.values()),sum(conf)/max(1,len(conf)),boxes)
-        if result[1]>best[1]: best=result
-        if best[1]>=85: break
+        if quality(result)>quality(best): best=result
+        if best[1]>=85 and quality(best)[0]: break
     return best[:2]
 
 def detect_poll(image, command):

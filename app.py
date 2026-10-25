@@ -157,7 +157,7 @@ class App:
                 try:image=grab(mode,box,hwnd)
                 finally:
                     if sys.platform=='darwin' and mode=='screen':self.q.put(('show',None,epoch))
-                text,confidence=recognize(image,tesseract())
+                text,confidence=recognize(image,tesseract(),quiz_mode=True)
                 return clean(text),confidence,time.monotonic()-t
             if sys.platform=='darwin' and mode=='screen':
                 self.busy=True;self.root.withdraw();self.root.after(180,lambda:self.worker('ocr',capture,epoch))
