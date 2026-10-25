@@ -138,7 +138,11 @@ def self_test():
     finally:engine.stop()
     print('Bundled OCR and AI smoke passed')
 if __name__=='__main__':
-    if '--self-test' in sys.argv:self_test()
+    if '--self-test' in sys.argv:
+        try:self_test()
+        except Exception as exc:
+            (DATA/'self-test-error.txt').write_text(type(exc).__name__+': '+str(exc),encoding='utf-8')
+            sys.exit(1)
     else:
         if os.name=='nt':ctypes.windll.user32.SetProcessDPIAware()
         root=tk.Tk();App(root);root.mainloop()

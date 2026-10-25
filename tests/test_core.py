@@ -29,6 +29,18 @@ class Tests(unittest.TestCase):
             self.assertIn('БАТАЛГААЖААГҮЙ',result)
             self.assertIn('B сонголт',result)
             self.assertEqual(opener.open.call_args.args[0].full_url,'http://127.0.0.1:11434/api/chat')
+    def test_remote_endpoint_rejected(self):
+        with self.assertRaises(ValueError):local_chat('bundled','question',[],allow_general=True,endpoint='https://example.com/v1/chat/completions')
+    def test_private_server_auth(self):
+        from unittest.mock import MagicMock
+        response=MagicMock();response.__enter__.return_value.read.return_value=json.dumps({'choices':[{'message':{'content':'4'}}]}).encode()
+        opener=MagicMock();opener.open.return_value=response
+        with patch('core.build_opener',return_value=opener):
+            result=local_chat('bundled','question',[],allow_general=True,endpoint='http://127.0.0.1:12345/v1/chat/completions',api_key='test-token')
+            self.assertIn('4',result)
+            req=opener.open.call_args.args[0]
+            self.assertEqual(req.get_header('Authorization'),'Bearer test-token')
+            self.assertFalse(json.loads(req.data)['chat_template_kwargs']['enable_thinking'])
     def test_invalid_model(self):
         with self.assertRaises(ValueError):local_chat('bad model','q',[])
 if __name__=='__main__':unittest.main()
