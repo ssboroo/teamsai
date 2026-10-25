@@ -7,13 +7,16 @@ DATA=Path(os.environ.get('LOCALAPPDATA',str(Path.home())))/'TeamsAI';DATA.mkdir(
 BG='#10151f';CARD='#1b2331';FG='#ecf2ff';MUTED='#a6b5cc';ACCENT='#74ebc2'
 class App:
     def __init__(self,root):
-        self.root=root;self.engine=Engine();self.q=queue.Queue();self.ready=False;self.busy=False;self.running=False;self.region=None;self.last='';self.dedup=Deduper();self.failures={};self.generation=0;self.started=0;self.candidate_started=0;self.mode=tk.StringVar(value='region');self.hwnd=None;self.capture_excluded=False
-        root.title('TeamsAI • Дэлгэцийн туслах');root.geometry('460x680');root.minsize(420,560);root.configure(bg=BG)
+        self.root=root;self.engine=Engine();self.q=queue.Queue();self.ready=False;self.busy=False;self.running=False;self.region=None;self.last='';self.dedup=Deduper();self.failures={};self.generation=0;self.started=0;self.candidate_started=0;self.mode=tk.StringVar(value='region');self.hwnd=None;self.capture_excluded=False;self.results={}
+        root.title('TeamsAI • Дэлгэцийн туслах');root.geometry('460x680');root.minsize(420,640);root.configure(bg=BG)
         try:self.settings=json.loads((DATA/'settings.json').read_text())
         except (OSError,ValueError):self.settings={}
-        self.interval=tk.IntVar(value=max(1,min(30,int(self.settings.get('interval',3)))));self.general=tk.BooleanVar(value=True)
-        self.label('TEAMS AI',24,ACCENT).pack(anchor='w',padx=22,pady=(22,2));self.label('Дэлгэц уншина. Хариу санал болгоно.',10,MUTED).pack(anchor='w',padx=22)
-        controls=tk.Frame(root,bg=BG);controls.pack(fill='x',padx=22,pady=18)
+        if not isinstance(self.settings,dict):self.settings={}
+        try:interval=max(1,min(30,int(self.settings.get('interval',3))))
+        except (TypeError,ValueError):interval=3
+        self.interval=tk.IntVar(value=interval);self.general=tk.BooleanVar(value=True)
+        self.label('TEAMS AI',24,ACCENT).pack(anchor='w',padx=22,pady=(14,2));self.label('Дэлгэц уншина. Хариу санал болгоно.',10,MUTED).pack(anchor='w',padx=22)
+        controls=tk.Frame(root,bg=BG);controls.pack(fill='x',padx=22,pady=10)
         self.button(controls,'① Хэсэг сонгох',self.select).pack(side='left',fill='x',expand=True,padx=(0,8))
         self.start_button=self.button(controls,'▶ Эхлэх',self.toggle);self.start_button.pack(side='left',fill='x',expand=True)
         modes=tk.Frame(root,bg=BG);modes.pack(fill='x',padx=22,pady=(0,8))
@@ -23,12 +26,12 @@ class App:
         self.status=tk.StringVar(value='AI модель ачаалж байна… Эхний удаа удаж болно.')
         tk.Label(root,textvariable=self.status,bg=CARD,fg=ACCENT,wraplength=400,justify='left',padx=12,pady=10,font=('Segoe UI',10)).pack(fill='x',padx=22)
         self.label('ДЭЛГЭЦЭЭС УНШСАН АСУУЛТ',9,MUTED).pack(anchor='w',padx=22,pady=(16,6))
-        self.question=self.text(5);self.question.pack(fill='x',padx=22)
+        self.question=self.text(3);self.question.pack(fill='x',padx=22)
         self.label('ХАРИУЛТЫН САНАЛ',9,MUTED).pack(anchor='w',padx=22,pady=(16,6))
         self.choice=tk.StringVar(value='—')
         tk.Label(root,textvariable=self.choice,bg=BG,fg=ACCENT,font=('Segoe UI',24,'bold'),wraplength=410).pack(padx=22)
-        self.answer=self.text(10);self.answer.pack(fill='both',expand=True,padx=22)
-        footer=tk.Frame(root,bg=BG);footer.pack(fill='x',padx=22,pady=12)
+        self.answer=self.text(5);self.answer.pack(fill='both',expand=True,padx=22)
+        footer=tk.Frame(root,bg=BG);self.footer=footer;footer.pack(fill='x',padx=22,pady=12)
         self.button(footer,'Хуулах',self.copy).pack(side='left');self.button(footer,'Тохиргоо',self.options).pack(side='right')
         self.label('Локал • API түлхүүргүй • Teams-д өөрөө илгээнэ',9,MUTED).pack(pady=(0,12))
         root.after(400,self.exclude_capture)
@@ -72,16 +75,22 @@ class App:
                             answer=local_chat('bundled',text,refs,timeout=25,allow_general=general,endpoint=self.engine.endpoint,api_key=self.engine.key)
                             return answer,refs,key,time.monotonic()-self.started
                         self.worker('answer',infer,epoch)
+                    elif hit and key in self.results:self.display_answer(*self.results[key],cached=True)
                     elif confidence<70:self.status.set('Текст бүдэг байна. Хэсгийг томруулж дахин сонгоно уу.')
                 elif tag=='answer':
                     answer,refs,key,elapsed=value
-                    match=re.search(r'Хариулт\s*[:：]\s*([^\n]+)',answer,re.I)
-                    self.choice.set(match.group(1)[:60] if match else 'Саналыг уншина уу')
                     self.dedup.seen[key]=time.monotonic()
-                    self.answer.delete('1.0','end');self.answer.insert('1.0',answer+'\n\n'+'\n\n'.join(f'[{i+1}] {r["title"]} {r["article"]}\n{r["text"]}\n{r["source"]} • {r["verified_on"]}' for i,r in enumerate(refs)))
-                    self.status.set(f'Санал бэлэн • OCR + AI {elapsed:.1f}с');self.audit('answer',poll_hash=key,seconds=round(elapsed,2))
+                    self.results[key]=(answer,refs,elapsed)
+                    if len(self.results)>100:self.results.pop(next(iter(self.results)))
+                    self.display_answer(answer,refs,elapsed)
+                    self.audit('answer',poll_hash=key,seconds=round(elapsed,2))
         except queue.Empty:pass
         self.root.after(100,self.drain)
+    def display_answer(self,answer,refs,elapsed,cached=False):
+        match=re.search(r'Хариулт\s*[:：]\s*([^\n]+)',answer,re.I)
+        self.choice.set(match.group(1)[:60] if match else 'Саналыг уншина уу')
+        self.answer.delete('1.0','end');self.answer.insert('1.0',answer+'\n\n'+'\n\n'.join(f'[{i+1}] {r["title"]} {r["article"]}\n{r["text"]}\n{r["source"]} • {r["verified_on"]}' for i,r in enumerate(refs)))
+        self.status.set('Өмнөх санал — шууд харуулав' if cached else f'Санал бэлэн • OCR + AI {elapsed:.1f}с')
     def select(self):
         if self.running:self.toggle()
         top=tk.Toplevel(self.root);top.attributes('-fullscreen',True);top.attributes('-alpha',.35);top.attributes('-topmost',True)

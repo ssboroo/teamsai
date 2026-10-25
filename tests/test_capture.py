@@ -24,6 +24,8 @@ class WindowsCaptureTests(unittest.TestCase):
             try:
                 self.assertEqual(root.winfo_width(),460)
                 self.assertEqual(app.mode.get(),'region')
+                self.assertTrue(app.footer.winfo_ismapped())
+                self.assertLessEqual(app.footer.winfo_y()+app.footer.winfo_height(),root.winfo_height())
                 app.capture_options();root.update()
                 self.assertTrue(root.winfo_exists())
             finally:app.close()
