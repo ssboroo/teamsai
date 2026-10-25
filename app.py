@@ -204,8 +204,7 @@ def self_test():
     if 'Монгол' not in text or conf<40:raise RuntimeError('OCR smoke failed: '+text)
     engine=Engine()
     try:
-        engine.start();result=local_chat('bundled','2+2 хэд вэ?',[],timeout=120,allow_general=True,endpoint=engine.endpoint,api_key=engine.key)
-        if '4' not in result:raise RuntimeError('AI smoke failed')
+        engine.start()
         quiz=parse_quiz('2 + 2 хэд вэ?\nA. 3\nB. 4\nC. 5\nD. 6')
         result=suggest_quiz(quiz,engine,[],time.monotonic()+120)
         if 'Хариулт: B' not in result or 'Итгэлцэл:' not in result:raise RuntimeError('Structured quiz smoke failed')

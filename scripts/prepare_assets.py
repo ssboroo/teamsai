@@ -14,7 +14,9 @@ def get(url,path,expected=None):
     return path
 
 def api(url):
-    with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'TeamsAI-build'}),timeout=60) as r:return json.load(r)
+    headers={'User-Agent':'TeamsAI-build'}
+    if url.startswith('https://api.github.com/') and os.environ.get('GH_TOKEN'):headers['Authorization']='Bearer '+os.environ['GH_TOKEN']
+    with urllib.request.urlopen(urllib.request.Request(url,headers=headers),timeout=60) as r:return json.load(r)
 release=api('https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/b11871')
 asset=next(a for a in release['assets'] if a['name'].endswith('-bin-win-cpu-x64.zip'))
 expected=(asset.get('digest') or '').removeprefix('sha256:') or None

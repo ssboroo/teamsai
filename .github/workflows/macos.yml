@@ -35,6 +35,8 @@ jobs:
       - name: Unit tests
         run: python -m unittest discover -s tests -v
       - name: Bundle OCR, native libraries and local model
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: python scripts/prepare_macos.py
       - name: Real macOS OCR and local AI smoke
         run: python app.py --self-test

@@ -3,10 +3,14 @@ import hashlib,json,os,platform,shutil,subprocess,tarfile,urllib.request
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];A=ROOT/'assets';A.mkdir(exist_ok=True);manifest=[]
 def api(url):
-    with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'TeamsAI-build'}),timeout=120) as r:return json.load(r)
+    headers={'User-Agent':'TeamsAI-build'}
+    if url.startswith('https://api.github.com/') and os.environ.get('GH_TOKEN'):headers['Authorization']='Bearer '+os.environ['GH_TOKEN']
+    with urllib.request.urlopen(urllib.request.Request(url,headers=headers),timeout=120) as r:return json.load(r)
 def download(url,path,expected=None):
     path.parent.mkdir(parents=True,exist_ok=True);h=hashlib.sha256()
-    with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'TeamsAI-build'}),timeout=180) as r,path.open('wb') as f:
+    headers={'User-Agent':'TeamsAI-build'}
+    if url.startswith('https://api.github.com/') and os.environ.get('GH_TOKEN'):headers['Authorization']='Bearer '+os.environ['GH_TOKEN']
+    with urllib.request.urlopen(urllib.request.Request(url,headers=headers),timeout=180) as r,path.open('wb') as f:
         while chunk:=r.read(1024*1024):f.write(chunk);h.update(chunk)
     if expected and h.hexdigest()!=expected:raise RuntimeError('SHA mismatch '+path.name)
     manifest.append(dict(file=str(path.relative_to(ROOT)),sha256=h.hexdigest(),url=url))

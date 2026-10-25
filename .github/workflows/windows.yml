@@ -24,6 +24,8 @@ jobs:
         shell: pwsh
         run: ./scripts/installer_language.ps1
       - name: Bundle model, OCR, runtime; real smoke; build
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: ./build.ps1
       - name: Silent install and installed smoke
