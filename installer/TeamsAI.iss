@@ -1,31 +1,31 @@
 [Setup]
 AppId=TeamsAI.Local.Windows
-AppName=TeamsAI
-AppVersion=1.1.0
+AppName=BORO
+AppVersion=1.3.0
 DefaultDirName={localappdata}\Programs\TeamsAI
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\output
-OutputBaseFilename=TeamsAI-Setup
+OutputBaseFilename=BORO-Setup
 Compression=none
 DiskSpanning=yes
 DiskSliceSize=1500000000
 SlicesPerDisk=1
 WizardStyle=modern
-UninstallDisplayIcon={app}\TeamsAI.exe
+UninstallDisplayIcon={app}\BORO.exe
 CloseApplications=yes
 SetupLogging=yes
 [Languages]
 Name: "mn"; MessagesFile: "Mongolian.isl"
 [Files]
-Source: "..\dist\TeamsAI\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\BORO\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 [Icons]
-Name: "{autoprograms}\TeamsAI"; Filename: "{app}\TeamsAI.exe"
-Name: "{autodesktop}\TeamsAI"; Filename: "{app}\TeamsAI.exe"
+Name: "{autoprograms}\BORO"; Filename: "{app}\BORO.exe"
+Name: "{autodesktop}\BORO"; Filename: "{app}\BORO.exe"
 [Run]
-Filename: "{app}\TeamsAI.exe"; Description: "TeamsAI эхлүүлэх"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\BORO.exe"; Description: "BORO эхлүүлэх"; Flags: nowait postinstall skipifsilent
 [Messages]
-mn.WelcomeLabel1=TeamsAI суулгах
+mn.WelcomeLabel1=BORO суулгах
 mn.WelcomeLabel2=Монгол OCR, локал AI хөдөлгүүр болон модель хамт сууна.%n%nНэмэлт Python, Ollama, API түлхүүр шаардлагагүй.

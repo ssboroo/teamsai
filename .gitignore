@@ -6,3 +6,9 @@ build/
 output/
 *.spec
 installer/Mongolian.isl
+
+branding/*.ico
+branding/*.icns
+benchmark-results.json
+package-root/
+components.plist

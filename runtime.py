@@ -3,11 +3,11 @@ import json, os, secrets, socket, subprocess, sys, time, threading
 from pathlib import Path
 from urllib.request import Request, build_opener, ProxyHandler
 
-ROOT=Path(sys.executable).parent if getattr(sys,'frozen',False) else Path(__file__).parent
+ROOT=(Path(sys.executable).parent.parent/'Resources' if sys.platform=='darwin' else Path(sys.executable).parent) if getattr(sys,'frozen',False) else Path(__file__).parent
 class Engine:
     def __init__(self):self.process=None;self.key=secrets.token_hex(32);self.port=None;self.closed=threading.Event();self.lock=threading.Lock()
     def start(self, timeout=150):
-        exe=ROOT/'assets/llama/llama-server.exe'; model=ROOT/'assets/model/model.gguf'
+        exe=ROOT/('assets/llama/llama-server' if sys.platform=='darwin' else 'assets/llama/llama-server.exe'); model=ROOT/'assets/model/model.gguf'
         if not exe.exists() or not model.exists():raise RuntimeError('AI бүрдэл дутуу. Бүрэн суулгагчаар дахин суулгана уу.')
         with socket.socket() as sock:sock.bind(('127.0.0.1',0));self.port=sock.getsockname()[1]
         args=[str(exe),'-m',str(model),'--host','127.0.0.1','--port',str(self.port),'--api-key',self.key,'-c','4096','-ngl','0','--parallel','1']
@@ -35,4 +35,6 @@ class Engine:
             try:self.process.wait(timeout=5)
             except subprocess.TimeoutExpired:self.process.kill();self.process.wait(timeout=5)
 
-def tesseract():return str(ROOT/'assets/ocr/tesseract.exe')
+def tesseract():
+    os.environ['TESSDATA_PREFIX']=str(ROOT/'assets/ocr/tessdata')
+    return str(ROOT/('assets/ocr/tesseract' if sys.platform=='darwin' else 'assets/ocr/tesseract.exe'))
