@@ -1,7 +1,7 @@
 name: Windows • Бүрэн суулгагч
 on:
   push:
-    branches: [main]
+    branches: [main, codex/macos-bundled]
   workflow_dispatch:
 permissions:
   contents: write
@@ -29,22 +29,28 @@ jobs:
       - name: Silent install and installed smoke
         shell: pwsh
         run: |
-          $p=Start-Process output/TeamsAI-Setup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/DIR=C:\TeamsAI-Test','/LOG=install.log' -Wait -PassThru
+          $p=Start-Process output/BORO-Setup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/DIR=C:\BORO-Test','/LOG=install.log' -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw 'Silent installer failed' }
-          $p=Start-Process C:/TeamsAI-Test/TeamsAI.exe -ArgumentList '--self-test' -Wait -PassThru
+          $p=Start-Process C:/BORO-Test/BORO.exe -ArgumentList '--self-test' -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw 'Installed smoke failed' }
-          $p=Start-Process C:/TeamsAI-Test/unins000.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES' -Wait -PassThru
+          $p=Start-Process C:/BORO-Test/unins000.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES' -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw 'Uninstall failed' }
+      - name: Measure synthetic 30-second target
+        shell: pwsh
+        run: python scripts/benchmark_quiz.py
       - uses: actions/upload-artifact@v4
         with:
-          name: TeamsAI-Windows-Installer
-          path: output/*
+          name: BORO-Windows-Installer
+          path: |
+            output/*
+            benchmark-results.json
           compression-level: 0
           retention-days: 14
       - name: Publish verified build
+        if: github.ref == 'refs/heads/main'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag='build-${{ github.run_number }}'
-          gh release create $tag output/* --title "TeamsAI Windows $tag" --notes "Бүрэн багц: Python runtime, Tesseract mon+eng, llama.cpp CPU, Qwen3 4B. Бүх файлыг нэг хавтаст татаж TeamsAI-Setup.exe ажиллуулна. Windows automated OCR/AI, frozen app, silent install/uninstall checks passed. Real Teams/manual acceptance and Mongolian law accuracy remain unvalidated."
+          gh release create $tag output/* --title "BORO Windows $tag" --notes "Бүрэн багц: Python runtime, Tesseract mon+eng, llama.cpp CPU, Qwen3 4B. Бүх файлыг нэг хавтаст татаж BORO-Setup.exe ажиллуулна. Windows automated OCR/AI, frozen app, silent install/uninstall checks passed. Real Teams/manual acceptance and Mongolian law accuracy remain unvalidated."

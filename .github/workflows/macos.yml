@@ -30,6 +30,8 @@ jobs:
         run: |
           brew install tesseract dylibbundler
           python -m pip install -r requirements.txt pyobjc-framework-Quartz
+      - name: Generate BORO icons
+        run: python scripts/make_branding.py
       - name: Unit tests
         run: python -m unittest discover -s tests -v
       - name: Bundle OCR, native libraries and local model
@@ -37,21 +39,24 @@ jobs:
       - name: Real macOS OCR and local AI smoke
         run: python app.py --self-test
       - name: Freeze standalone app
-        run: python -m PyInstaller --clean --noconfirm --onedir --windowed --osx-bundle-identifier studio.rainy.teamsai --hidden-import Quartz --name TeamsAI app.py
+        run: python -m PyInstaller --clean --noconfirm --onedir --windowed --osx-bundle-identifier studio.rainy.boro --hidden-import Quartz --icon branding/boro.icns --name BORO app.py
       - name: App-local assets, ad-hoc signing, package
         run: python scripts/package_macos.py
       - name: Install and verify packaged application
         run: |
-          sudo installer -pkg output/TeamsAI-${{ matrix.arch }}.pkg -target /
-          /Applications/TeamsAI.app/Contents/MacOS/TeamsAI --self-test
-          sudo rm -rf /Applications/TeamsAI.app
+          sudo installer -pkg output/BORO-${{ matrix.arch }}.pkg -target /
+          /Applications/BORO.app/Contents/MacOS/BORO --self-test
+          sudo rm -rf /Applications/BORO.app
+      - name: Measure synthetic 30-second target
+        run: python scripts/benchmark_quiz.py
       - uses: actions/upload-artifact@v4
         with:
-          name: TeamsAI-macOS-${{ matrix.arch }}
+          name: BORO-macOS-${{ matrix.arch }}
           path: |
             output/*.pkg
             output/*.command
             output/*SHA256.txt
+            benchmark-results.json
           compression-level: 0
           retention-days: 14
       - name: Publish additional macOS download
@@ -59,4 +64,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create mac-${{ matrix.arch }}-${{ github.run_number }} output/*.part* output/*.command output/*SHA256.txt --title 'TeamsAI macOS ${{ matrix.arch }}' --notes 'macOS нэмэлт хувилбар. Windows release хэвээр. .part бүх файл болон Install command файлыг нэг хавтаст татна. Screen Recording зөвшөөрөл шаардлагатай. Ad-hoc signed, Apple notarization хийгдээгүй. Automated OCR/AI/package smoke passed; real Teams screen permission and accuracy need human validation.'
+          gh release create mac-${{ matrix.arch }}-${{ github.run_number }} output/*.part* output/*.command output/*SHA256.txt --title 'BORO macOS ${{ matrix.arch }}' --notes 'macOS нэмэлт хувилбар. Windows release хэвээр. .part бүх файл болон Install command файлыг нэг хавтаст татна. Screen Recording зөвшөөрөл шаардлагатай. Ad-hoc signed, Apple notarization хийгдээгүй. Automated OCR/AI/package smoke passed; real Teams screen permission and accuracy need human validation.'

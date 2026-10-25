@@ -3,19 +3,20 @@ from tkinter import filedialog, messagebox
 from pathlib import Path
 from core import clean, Deduper, LawIndex, local_chat
 from runtime import Engine, ROOT, tesseract
+from quiz import parse_quiz, suggest_quiz
 DATA=(Path.home()/'Library/Application Support/TeamsAI') if sys.platform=='darwin' else Path(os.environ.get('LOCALAPPDATA',str(Path.home())))/'TeamsAI';DATA.mkdir(parents=True,exist_ok=True);(DATA/'laws').mkdir(exist_ok=True)
 BG='#10151f';CARD='#1b2331';FG='#ecf2ff';MUTED='#a6b5cc';ACCENT='#74ebc2'
 class App:
     def __init__(self,root):
         self.root=root;self.engine=Engine();self.q=queue.Queue();self.ready=False;self.busy=False;self.running=False;self.region=None;self.last='';self.dedup=Deduper();self.failures={};self.generation=0;self.started=0;self.candidate_started=0;self.mode=tk.StringVar(value='region');self.hwnd=None;self.capture_excluded=False;self.results={}
-        root.title('TeamsAI • Дэлгэцийн туслах');root.geometry('460x680');root.minsize(420,640);root.configure(bg=BG)
+        root.title('BORO • Монгол Quiz туслах');root.geometry('460x680');root.minsize(420,640);root.configure(bg=BG)
         try:self.settings=json.loads((DATA/'settings.json').read_text())
         except (OSError,ValueError):self.settings={}
         if not isinstance(self.settings,dict):self.settings={}
         try:interval=max(1,min(30,int(self.settings.get('interval',3))))
         except (TypeError,ValueError):interval=3
         self.interval=tk.IntVar(value=interval);self.general=tk.BooleanVar(value=True)
-        self.label('TEAMS AI',24,ACCENT).pack(anchor='w',padx=22,pady=(14,2));self.label('Дэлгэц уншина. Хариу санал болгоно.',10,MUTED).pack(anchor='w',padx=22)
+        self.label('BORO',24,ACCENT).pack(anchor='w',padx=22,pady=(14,2));self.label('Монгол асуулт → сонголт → таны шийдвэр',10,MUTED).pack(anchor='w',padx=22)
         controls=tk.Frame(root,bg=BG);controls.pack(fill='x',padx=22,pady=10)
         self.button(controls,'① Хэсэг сонгох',self.select).pack(side='left',fill='x',expand=True,padx=(0,8))
         self.start_button=self.button(controls,'▶ Эхлэх',self.toggle);self.start_button.pack(side='left',fill='x',expand=True)
@@ -34,6 +35,10 @@ class App:
         footer=tk.Frame(root,bg=BG);self.footer=footer;footer.pack(fill='x',padx=22,pady=12)
         self.button(footer,'Хуулах',self.copy).pack(side='left');self.button(footer,'Тохиргоо',self.options).pack(side='right')
         self.label('Локал • API түлхүүргүй • Teams-д өөрөө илгээнэ',9,MUTED).pack(pady=(0,12))
+        try:
+            from PIL import Image,ImageTk
+            self.logo=ImageTk.PhotoImage(Image.open(ROOT/'branding/boro.png').resize((64,64)));root.iconphoto(True,self.logo)
+        except (OSError,tk.TclError):pass
         root.after(400,self.exclude_capture)
         root.after(100,self.drain);root.protocol('WM_DELETE_WINDOW',self.close)
         self.worker('ready',lambda:self.engine.start())
@@ -59,13 +64,19 @@ class App:
                 self.root.deiconify();self.root.after(100,self.drain);return
             self.busy=False
             if tag=='ready':self.ready=True;self.status.set('Бэлэн. Асуултын хэсгээ сонгоод Эхлэх дарна уу.')
-            elif tag=='error':self.status.set('Алдаа: '+value[2]);self.audit('error',stage=value[0],kind=value[1])
+            elif tag=='error':
+                if epoch is None or epoch==self.generation:
+                    self.status.set('Алдаа: '+value[2]);self.audit('error',stage=value[0],kind=value[1])
             elif epoch==self.generation and self.running:
                 if tag=='ocr':
-                    text,confidence,elapsed=value;self.question.delete('1.0','end');self.question.insert('1.0',text)
-                    self.status.set(f'OCR {confidence:.0f}% • {elapsed:.1f}с')
+                    text,confidence,elapsed=value;raw_text=text
+                    try:text=parse_quiz(text).text
+                    except ValueError as exc:
+                        self.choice.set('OCR-оо шалгана уу');self.answer.delete('1.0','end');self.status.set(str(exc));text=''
+                    self.question.delete('1.0','end');self.question.insert('1.0',text or raw_text)
+                    if text:self.status.set(f'OCR {confidence:.0f}% • {elapsed:.1f}с')
                     stable=text==self.last
-                    if not stable:
+                    if text and not stable:
                         self.candidate_started=time.monotonic()-elapsed
                         self.choice.set('Шинэ асуулт…');self.answer.delete('1.0','end')
                     self.last=text
@@ -75,7 +86,8 @@ class App:
                         general=self.general.get();self.status.set('Хариу боловсруулж байна…')
                         def infer():
                             refs=LawIndex(DATA/'laws').search(text)
-                            answer=local_chat('bundled',text,refs,timeout=25,allow_general=general,endpoint=self.engine.endpoint,api_key=self.engine.key)
+                            if not refs and not general:raise ValueError('Хуулийн сан дутуу. Сан нэмэх эсвэл ерөнхий санал зөвшөөрнө үү.')
+                            answer=suggest_quiz(parse_quiz(text),self.engine,refs,self.started+30)
                             return answer,refs,key,time.monotonic()-self.started
                         self.worker('answer',infer,epoch)
                     elif hit and key in self.results:self.display_answer(*self.results[key],cached=True)
@@ -91,7 +103,7 @@ class App:
         self.root.after(100,self.drain)
     def display_answer(self,answer,refs,elapsed,cached=False):
         match=re.search(r'Хариулт\s*[:：]\s*([^\n]+)',answer,re.I)
-        self.choice.set(match.group(1)[:60] if match else 'Саналыг уншина уу')
+        self.choice.set((match.group(1).split(' — ',1)[0]) if match else 'Саналыг уншина уу')
         self.answer.delete('1.0','end');self.answer.insert('1.0',answer+'\n\n'+'\n\n'.join(f'[{i+1}] {r["title"]} {r["article"]}\n{r["text"]}\n{r["source"]} • {r["verified_on"]}' for i,r in enumerate(refs)))
         self.status.set('Өмнөх санал — шууд харуулав' if cached else f'Санал бэлэн • OCR + AI {elapsed:.1f}с')
     def select(self):
@@ -194,6 +206,9 @@ def self_test():
     try:
         engine.start();result=local_chat('bundled','2+2 хэд вэ?',[],timeout=120,allow_general=True,endpoint=engine.endpoint,api_key=engine.key)
         if '4' not in result:raise RuntimeError('AI smoke failed')
+        quiz=parse_quiz('2 + 2 хэд вэ?\nA. 3\nB. 4\nC. 5\nD. 6')
+        result=suggest_quiz(quiz,engine,[],time.monotonic()+120)
+        if 'Хариулт: B' not in result or 'Итгэлцэл:' not in result:raise RuntimeError('Structured quiz smoke failed')
     finally:engine.stop()
     print('Bundled OCR and AI smoke passed')
 if __name__=='__main__':

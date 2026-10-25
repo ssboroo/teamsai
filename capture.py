@@ -14,7 +14,7 @@ def windows():
             length=user.GetWindowTextLengthW(hwnd)
             if length:
                 title=ctypes.create_unicode_buffer(length+1);user.GetWindowTextW(hwnd,title,length+1)
-                if title.value and not title.value.startswith('TeamsAI'):result.append((int(hwnd),title.value))
+                if title.value and not title.value.startswith(('TeamsAI','BORO')):result.append((int(hwnd),title.value))
         return True
     user.EnumWindows(callback,0);return result
 
