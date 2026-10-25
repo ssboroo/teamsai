@@ -1,7 +1,7 @@
 import io,json,sys,time,unittest,uuid
 from unittest.mock import patch,MagicMock
 from urllib.error import HTTPError,URLError
-from providers import CloudEngine,CredentialStore,NoRedirect
+from providers import CloudEngine,CredentialStore,NoRedirect,cloud_ssl_context
 from quiz import parse_quiz,suggest_quiz
 ANSWER={'choice':'B','reason':'Товч үндэслэл.','confidence':'medium'}
 PAYLOAD={'messages':[{'role':'system','content':'rules'},{'role':'user','content':'data'}],'response_format':{'schema':{'type':'object','properties':{'choice':{'type':'string'},'reason':{'type':'string'},'confidence':{'type':'string'}},'required':['choice','reason','confidence'],'additionalProperties':False}}}
@@ -35,6 +35,10 @@ class ProviderTests(unittest.TestCase):
     def test_invalid_provider_and_model(self):
         for provider,model in [('other','m'),('openai','https://attacker.example'),('gemini','m\r\nx')]:
             with self.assertRaises(ValueError):CloudEngine(provider,model)
+    def test_bundled_tls_verifies_certificates(self):
+        import ssl
+        context=cloud_ssl_context()
+        self.assertTrue(context.check_hostname);self.assertEqual(context.verify_mode,ssl.CERT_REQUIRED);self.assertGreater(context.cert_store_stats()['x509_ca'],0)
     def test_redirect_blocked(self):self.assertIsNone(NoRedirect().redirect_request(None,None,None,None,None,None))
     def test_vault_only_no_fallback(self):
         backend=MagicMock()

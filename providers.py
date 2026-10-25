@@ -1,6 +1,6 @@
 """Opt-in cloud adapters. Fixed HTTPS hosts, OS-only credential storage, no secret logs."""
 import copy,json,re,sys,time
-from urllib.request import Request,build_opener,ProxyHandler,HTTPRedirectHandler
+from urllib.request import Request,build_opener,ProxyHandler,HTTPRedirectHandler,HTTPSHandler
 from urllib.error import HTTPError,URLError
 
 PROVIDERS={'local':'Локал (офлайн)','gemini':'Gemini','openai':'OpenAI','grok':'Grok / xAI'}
@@ -40,6 +40,10 @@ class CredentialStore:
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):return None
 
+def cloud_ssl_context():
+    import ssl,certifi
+    return ssl.create_default_context(cafile=certifi.where())
+
 class CloudEngine:
     def __init__(self,provider,model):
         if provider not in DEFAULT_MODELS:raise ValueError('AI үйлчилгээ буруу')
@@ -67,7 +71,7 @@ class CloudEngine:
         if remaining<1:raise TimeoutError('Түлхүүр уншихад хугацаа дууслаа; API хүсэлт илгээсэнгүй.')
         req=Request(url,data=json.dumps(body).encode(),headers=headers)
         try:
-            with build_opener(ProxyHandler({}),NoRedirect()).open(req,timeout=remaining) as response:raw=response.read(200001)
+            with build_opener(ProxyHandler({}),NoRedirect(),HTTPSHandler(context=cloud_ssl_context())).open(req,timeout=remaining) as response:raw=response.read(200001)
         except HTTPError as exc:
             messages={401:'API түлхүүр хүчингүй.',403:'Энэ модель/үйлчилгээнд эрх хүрэхгүй.',404:'Моделийн нэр эсвэл хандалтаа шалгана уу.',429:'API лимит эсвэл кредит хүрэлцэхгүй. Локал горимыг сонгож болно.'}
             raise RuntimeError(messages.get(exc.code,f'AI үйлчилгээ HTTP {exc.code} алдаа буцаалаа.')) from None

@@ -2,3 +2,4 @@ Pillow==11.3.0
 pytesseract==0.3.13
 pyinstaller==6.16.0
 keyring==25.6.0
+certifi==2026.10.23

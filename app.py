@@ -4,7 +4,7 @@ from pathlib import Path
 from core import clean, Deduper, LawIndex, local_chat
 from runtime import Engine, ROOT, tesseract
 from quiz import parse_quiz, suggest_quiz
-from providers import PROVIDERS, DEFAULT_MODELS, CredentialStore, CloudEngine
+from providers import PROVIDERS, DEFAULT_MODELS, CredentialStore, CloudEngine, cloud_ssl_context
 DATA=(Path.home()/'Library/Application Support/TeamsAI') if sys.platform=='darwin' else Path(os.environ.get('LOCALAPPDATA',str(Path.home())))/'TeamsAI';DATA.mkdir(parents=True,exist_ok=True);(DATA/'laws').mkdir(exist_ok=True)
 BG='#10151f';CARD='#1b2331';FG='#ecf2ff';MUTED='#a6b5cc';ACCENT='#74ebc2'
 class App:
@@ -270,7 +270,8 @@ class App:
 
 def self_test():
     from PIL import Image,ImageDraw,ImageFont
-    CredentialStore.backend() # Confirm frozen native backend imports; never accesses/stores a key.
+    CredentialStore.backend() # Native backend import; never accesses/stores a key.
+    if cloud_ssl_context().cert_store_stats()['x509_ca']<1:raise RuntimeError('Bundled CA roots missing')
     from ocr import recognize
     image=Image.new('RGB',(1000,200),'white');draw=ImageDraw.Draw(image)
     font=ImageFont.truetype('/System/Library/Fonts/Supplemental/Arial.ttf' if sys.platform=='darwin' else 'C:/Windows/Fonts/arial.ttf',36)
