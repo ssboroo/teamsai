@@ -28,7 +28,7 @@ def languages(command, reader):
 
 from PIL import ImageOps, ImageFilter
 
-def recognize(image, command, budget=6, quiz_mode=False):
+def recognize(image, command, budget=10, quiz_mode=False):
     import pytesseract
     pytesseract.pytesseract.tesseract_cmd=command
     configure_subprocess(pytesseract.pytesseract)
@@ -38,19 +38,16 @@ def recognize(image, command, budget=6, quiz_mode=False):
     if not {'mon','eng'}.issubset(langs): raise RuntimeError('Tesseract mon + eng traineddata суулгаагүй байна.')
     started=time.monotonic(); best=('',0,[])
     def quality(result):
-        from reading import readable_text
-        try:readable_text(result[0]);readable=1
-        except ValueError:readable=0
+        complete=True
         if quiz_mode:
             from quiz import parse_quiz
-            try:parse_quiz(result[0]);readable=2
-            except ValueError:pass
-        # Prefer meaningful content over a single high-confidence fragment.
-        return readable,result[1]
+            try:parse_quiz(result[0])
+            except ValueError:complete=False
+        return complete,result[1]
     # First pass preserves light/dark UI; second pass boosts small Cyrillic glyphs.
     # Bound full-screen work; prepare fallback only if the fast pass fails.
     image=image.copy()
-    image.thumbnail((2200,2200))
+    image.thumbnail((3200,3200))
     def variants():
         # Normalize dark UI before the first pass, not only after a failure.
         from PIL import ImageStat
@@ -60,20 +57,19 @@ def recognize(image, command, budget=6, quiz_mode=False):
         yield primary,6
         gray=ImageOps.autocontrast(ImageOps.grayscale(image))
         if gray.resize((1,1)).getpixel((0,0))<128:gray=ImageOps.invert(gray)
-        scale=min(2,2800/max(image.size))
-        yield gray.resize((max(1,int(image.width*scale)),max(1,int(image.height*scale)))).filter(ImageFilter.SHARPEN),11
-        # A crisp block pass can recover thin glyphs missed by sparse layout.
-        yield gray.resize((max(1,int(image.width*scale)),max(1,int(image.height*scale)))).point(lambda p:255 if p>160 else 0),6
+        scale=min(2.5,3600/max(image.size))
+        enlarged=gray.resize((max(1,int(image.width*scale)),max(1,int(image.height*scale)))).filter(ImageFilter.SHARPEN)
+        yield enlarged,11
+        yield enlarged,6
+        yield enlarged.point(lambda p:255 if p>160 else 0),3
     for attempt,(im,psm) in enumerate(variants()):
         remaining=budget-(time.monotonic()-started)
         if remaining<.3: break
         try:
-            d=pytesseract.image_to_data(im,lang=('eng+mon' if attempt==2 else 'mon+eng'),config=f'--oem 1 --psm {psm}',output_type=pytesseract.Output.DICT,timeout=max(.3,remaining/(3-attempt)))
+            d=pytesseract.image_to_data(im,lang='mon+eng',config=f'--oem 1 --psm {psm}',output_type=pytesseract.Output.DICT,timeout=max(.3,remaining/(4-attempt)))
         except RuntimeError as exc:
             if 'timeout' not in str(exc).lower():raise
-            if attempt<2:continue
-            if best[0]:break
-            raise RuntimeError('OCR хугацаа хэтэрлээ. Бүтэн дэлгэцийн оронд асуултын хэсгийг сонгоно уу; автоматаар дахин оролдоно.') from exc
+            continue
         lines={}; conf=[]; boxes=[]
         for i,w in enumerate(d['text']):
             c=float(d['conf'][i])
@@ -82,9 +78,8 @@ def recognize(image, command, budget=6, quiz_mode=False):
             conf.append(c); boxes.append((d['left'][i],d['top'][i],d['width'][i],d['height'][i]))
         result=('\n'.join(' '.join(v) for v in lines.values()),sum(conf)/max(1,len(conf)),boxes)
         if quality(result)>quality(best): best=result
-        import re
-        has_choices=bool(re.search(r'(?m)^\s*[A-DАБВГСД1-9][.):]',best[0]))
-        if (best[1]>=75 and quality(best)[0]==2) or (best[1]>=85 and quality(best)[0]==1 and not has_choices):break
+        if best[1]>=80 and quality(best)[0]: break
+    if not best[0]:raise RuntimeError('Зураг дээрээс бичиг уншиж чадсангүй. Асуулт харагдаж байгаа эсэхийг шалгана уу. Уншсан текстийг засах товчоор текст оруулж бас болно.')
     return best[:2]
 
 def detect_poll(image, command):
