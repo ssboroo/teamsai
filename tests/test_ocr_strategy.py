@@ -35,3 +35,11 @@ class OCRStrategyTests(unittest.TestCase):
         with patch.dict(sys.modules,{'pytesseract':mock}),patch('ocr.ImageOps.grayscale',side_effect=AssertionError('unnecessary fallback')):
             recognize(Image.new('RGB',(5000,3000),'white'),'tesseract',quiz_mode=True)
         self.assertLessEqual(max(mock.image_to_data.call_args.args[0].size),2200)
+
+    def test_dark_background_is_normalized_before_fast_pass(self):
+        complete=data(['Монгол Улсын нийслэл аль вэ?','A. Дархан','B. Улаанбаатар','C. Эрдэнэт','D. Ховд'],92)
+        mock=types.SimpleNamespace(pytesseract=types.SimpleNamespace(),get_languages=lambda **k:['mon','eng'],Output=types.SimpleNamespace(DICT='dict'),image_to_data=MagicMock(return_value=complete))
+        with patch.dict(sys.modules,{'pytesseract':mock}):
+            recognize(Image.new('RGB',(400,300),'#151b27'),'tesseract',quiz_mode=True)
+        self.assertGreater(mock.image_to_data.call_args.args[0].getpixel((0,0)),200)
+        self.assertEqual(mock.image_to_data.call_count,1)
