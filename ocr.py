@@ -1,10 +1,33 @@
-import time
+import time, sys, subprocess
+from functools import lru_cache
+
+class QuietSubprocess:
+    """A pytesseract-only facade: do not monkeypatch Python's subprocess module."""
+    _boro_hidden=True
+    def __init__(self,base):self.base=base
+    def __getattr__(self,name):
+        original=getattr(self.base,name)
+        if name not in ('run','check_output','Popen'):return original
+        def hidden(*args,**kwargs):
+            kwargs['creationflags']=kwargs.get('creationflags',0) | subprocess.CREATE_NO_WINDOW
+            return original(*args,**kwargs)
+        return hidden
+
+def configure_subprocess(module):
+    if sys.platform=='win32' and getattr(module,'subprocess',None) is not None and not getattr(module.subprocess,'_boro_hidden',False):
+        module.subprocess=QuietSubprocess(module.subprocess)
+
+@lru_cache(maxsize=8)
+def languages(command, reader):
+    return reader(config="")
+
 from PIL import ImageOps, ImageFilter
 
 def recognize(image, command, budget=6, quiz_mode=False):
     import pytesseract
     pytesseract.pytesseract.tesseract_cmd=command
-    langs=pytesseract.get_languages(config='')
+    configure_subprocess(pytesseract.pytesseract)
+    langs=languages(command,pytesseract.get_languages)
     if not {'mon','eng'}.issubset(langs): raise RuntimeError('Tesseract mon + eng traineddata суулгаагүй байна.')
     started=time.monotonic(); best=('',0,[])
     def quality(result):
@@ -40,6 +63,7 @@ def detect_poll(image, command):
     """Heuristic candidate region from OCR anchors, never an automatic action target."""
     import pytesseract
     pytesseract.pytesseract.tesseract_cmd=command
+    configure_subprocess(pytesseract.pytesseract)
     d=pytesseract.image_to_data(image,lang='mon+eng',config='--oem 1 --psm 11',output_type=pytesseract.Output.DICT,timeout=4)
     anchors=('poll','санал','асуулт','vote','submit','илгээх')
     hits=[i for i,w in enumerate(d['text']) if any(a in w.casefold() for a in anchors) and float(d['conf'][i])>=40]

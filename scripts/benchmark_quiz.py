@@ -15,13 +15,13 @@ try:
         image=Image.new('RGB',(1400,330),'white');ImageDraw.Draw(image).multiline_text((20,20),text,font=font,fill='black',spacing=10)
         start=time.monotonic();row={'expected':expected}
         try:
-            first,conf=recognize(image,tesseract(),quiz_mode=True);time.sleep(3)
-            second,conf2=recognize(image,tesseract(),quiz_mode=True);row['synthetic_ocr_text']=second;q=parse_quiz(second)
+            first,conf=recognize(image,tesseract(),budget=2,quiz_mode=True);time.sleep(.2)
+            second,conf2=recognize(image,tesseract(),budget=2,quiz_mode=True);row['synthetic_ocr_text']=second;q=parse_quiz(second)
             if parse_quiz(first).text!=q.text:raise ValueError('OCR unstable')
             answer=suggest_quiz(q,engine,[],start+30)
             row.update(correct=('Хариулт: '+expected+' —') in answer,ocr_confidence=min(conf,conf2))
         except Exception as exc:row.update(correct=False,error=type(exc).__name__,detail=str(exc)[:240])
-        row['seconds']=round(time.monotonic()-start,3);row['within_30s']=row['seconds']<30;rows.append(row)
+        row['seconds']=round(time.monotonic()-start,3);row['within_10s']=row['seconds']<10;row['within_30s']=row['seconds']<30;rows.append(row)
 finally:engine.stop()
-report={'scope':'Synthetic rendered text, warm loaded model, two OCR passes plus 3s stability interval; no real Teams screen detection; 2 examples only.','cases':rows,'all_correct_and_under_30s':all(r['correct'] and r['within_30s'] for r in rows)}
+report={'scope':'Synthetic rendered text, warm loaded model, two OCR passes plus 0.2s scheduling interval; no real Teams screen detection; 2 examples only.','cases':rows,'all_correct_and_under_10s':all(r['correct'] and r['within_10s'] for r in rows),'all_correct_and_under_30s':all(r['correct'] and r['within_30s'] for r in rows)}
 out=Path('benchmark-results.json');out.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8');print(json.dumps(report,ensure_ascii=False))

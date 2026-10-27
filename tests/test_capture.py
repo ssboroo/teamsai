@@ -22,7 +22,7 @@ class WindowsCaptureTests(unittest.TestCase):
         with patch('app.Engine.start',return_value=None):
             app=App(root);root.update()
             try:
-                self.assertEqual(root.winfo_width(),460)
+                self.assertEqual(root.winfo_width(),640)
                 self.assertEqual(app.mode.get(),'region')
                 self.assertTrue(app.footer.winfo_ismapped())
                 self.assertLessEqual(app.footer.winfo_y()+app.footer.winfo_height(),root.winfo_height())
