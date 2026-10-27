@@ -361,7 +361,7 @@ def self_test():
         result=suggest_quiz(quiz,engine,[],time.monotonic()+120)
         if 'Хариулт: B' not in result or 'Итгэлцэл:' not in result:raise RuntimeError('Structured quiz smoke failed')
         direct=answer_question('Монгол Улсын нийслэл юу вэ?',engine,[],time.monotonic()+120)
-        if 'улаанбаатар' not in direct.casefold():raise RuntimeError('Open question smoke failed: '+direct[:1000])
+        if not any(name in direct.casefold() for name in ('улаанбаатар','ulaanbaatar','ulan bator')):raise RuntimeError('Open question smoke failed: '+direct[:1000])
     finally:engine.stop()
     print('Bundled OCR and AI smoke passed')
 if __name__=='__main__':
