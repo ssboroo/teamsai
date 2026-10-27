@@ -71,6 +71,18 @@ class PipelineTests(unittest.TestCase):
 
     def test_incomplete_ocr_does_not_erase_previous_answer(self):
         a=self.app()
-        a.q.put(('ocr',('дутуу текст',90,.1),1));a.drain()
+        a.q.put(('ocr',('???',90,.1),1));a.drain()
         a.answer.delete.assert_not_called()
+        a.worker.assert_not_called()
+
+    def test_open_question_starts_after_two_stable_reads(self):
+        a=self.app()
+        for _ in range(2):a.q.put(('ocr',('Монгол Улсын нийслэл юу вэ?',62,.1),1));a.drain()
+        a.worker.assert_called_once()
+        self.assertEqual(a.active_question,'Монгол Улсын нийслэл юу вэ?')
+
+    def test_manual_answer_is_shown_while_monitor_stopped(self):
+        a=self.app();a.running=False;a.last='Монгол Улсын нийслэл?'
+        a.q.put(('manual_answer',('Хариулт: Улаанбаатар',[],'manual-key',2,a.last),1));a.drain()
+        a.history.add.assert_called_once();a.display_answer.assert_called_once()
         a.worker.assert_not_called()

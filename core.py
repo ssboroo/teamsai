@@ -11,7 +11,7 @@ def tokens(text):
 class Deduper:
     def __init__(self, ttl=600): self.ttl, self.seen = ttl, {}
     def check(self, text, commit=False):
-        key = hashlib.sha256(' '.join(tokens(text)).encode()).hexdigest()
+        key = hashlib.sha256(' '.join(re.findall(r'[\w]+|[^\w\s?？]',unicodedata.normalize('NFKC',text).casefold())).encode()).hexdigest()
         now = time.monotonic()
         self.seen = {k:v for k,v in self.seen.items() if now-v < self.ttl}
         hit = key in self.seen
