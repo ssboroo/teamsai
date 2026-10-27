@@ -28,9 +28,9 @@ if len(servers)!=1:raise RuntimeError('llama-server missing/ambiguous')
 if servers[0].parent!=ASSETS/'llama':
     for f in servers[0].parent.iterdir():
         if f.is_file():shutil.copy2(f,ASSETS/'llama'/f.name)
-info=api('https://huggingface.co/api/models/Qwen/Qwen3-4B-GGUF?blobs=true');revision=info['sha']
-model=next(x for x in info['siblings'] if x['rfilename'].lower()=='qwen3-4b-q4_k_m.gguf')
-get(f'https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/{revision}/'+model['rfilename'],ASSETS/'model/model.gguf',model.get('lfs',{}).get('sha256'))
+info=api('https://huggingface.co/api/models/unsloth/Qwen3-4B-Instruct-2507-GGUF?blobs=true');revision=info['sha']
+model=next(x for x in info['siblings'] if x['rfilename'].lower()=='qwen3-4b-instruct-2507-q4_k_m.gguf')
+get(f'https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/{revision}/'+model['rfilename'],ASSETS/'model/model.gguf',model.get('lfs',{}).get('sha256'))
 ocr=Path(os.environ.get('ProgramFiles','C:/Program Files'))/'Tesseract-OCR'
 if not (ocr/'tesseract.exe').exists():raise RuntimeError('Build agent Tesseract missing')
 shutil.copytree(ocr,ASSETS/'ocr',dirs_exist_ok=True)
@@ -44,7 +44,7 @@ for dll in ['vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll']:
     for folder in ['llama','ocr']:shutil.copy2(source,ASSETS/folder/dll)
 for name,url in {
  'llama-LICENSE.txt':'https://raw.githubusercontent.com/ggml-org/llama.cpp/'+release['tag_name']+'/LICENSE',
- 'Qwen-LICENSE.txt':f'https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/{revision}/LICENSE',
+ 'Qwen-LICENSE.txt':'https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/resolve/main/LICENSE',
  'Tesseract-LICENSE.txt':'https://raw.githubusercontent.com/tesseract-ocr/tesseract/main/LICENSE',
  'tessdata-LICENSE.txt':f'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/{tess_revision}/LICENSE'
 }.items():get(url,ASSETS/'licenses'/name)

@@ -8,6 +8,8 @@ python -m unittest discover -s tests -v
 if ($LASTEXITCODE) { throw 'Tests failed' }
 python scripts/prepare_assets.py
 if ($LASTEXITCODE) { throw 'Assets failed' }
+python scripts/verify_ocr_layouts.py
+if ($LASTEXITCODE) { throw 'Mongolian OCR layout regression failed' }
 python app.py --self-test
 if ($LASTEXITCODE) { throw 'Real OCR/AI smoke failed' }
 python -m PyInstaller --clean --noconfirm --onedir --windowed --icon branding/boro.ico --name BORO app.py

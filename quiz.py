@@ -14,24 +14,41 @@ class Quiz:
     @property
     def fingerprint(self):return hashlib.sha256(' '.join(tokens(self.text)).encode()).hexdigest()
 
+def quiz_identity(text):
+    # Ignore case/spacing only. Preserve digits, signs and negation words.
+    return re.sub(r'\s+',' ',clean(text)).casefold().strip()
+
 def parse_quiz(raw):
+    if len(raw)>12000:raise ValueError('Хэт их текст байна. Асуултын хэсгийг сонгоно уу.')
     lines=clean(raw).splitlines();question=[];options={};current=None
-    # Cyrillic АБВГ and Latin A-D are handled as separate alphabets.
-    cyrillic=any(re.match(r'^\(?[БГ]\s*[.)：:]\s*',l) for l in lines)
+    label_re=re.compile(r'^\s*[○◯●◉□☐☑•]?\s*\(?([A-DАБВГСД1-4])(?:\s*[.)：:、\]—–-]\s*|\s+|$)(.*)$',re.I)
+    cyrillic=any(re.match(r'^\s*[○◯●◉□☐☑•]?\s*\(?[БГ](?:[.)：:]|\s|$)',l,re.I) for l in lines)
     mapping={'А':'A','Б':'B','В':'C','Г':'D'} if cyrillic else {'А':'A','В':'B','С':'C','Д':'D'}
-    for line in lines:
+    # Only treat numbered rows as choices when all four exist after a question.
+    numbered=all(any(re.match(r'^'+str(i)+r'[.)：:]\s*\S',l) for l in lines[1:]) for i in range(1,5))
+    bullet_rows=[i for i,l in enumerate(lines) if re.match(r'^[○◯●◉□☐☑•]\s+\S',l)]
+    bullet_index=0
+    for index,line in enumerate(lines):
         if re.fullmatch(r'(?:(?:Үлдсэн хугацаа|Time left)\s*:?\s*)?\d{1,2}:\d{2}',line,re.I):continue
-        if line.casefold() in {'poll','quiz','санал асуулга','submit','илгээх','vote','санал өгөх'}:continue
-        m=re.match(r'^\(?([A-DАБВГСД])\s*[.)：:]\s*(.*)$',line,re.I)
+        if line.casefold() in {'poll','quiz','санал асуулга','submit','илгээх','vote','санал өгөх','microsoft forms','microsoft teams','forms','required','заавал'}:continue
+        if current and re.fullmatch(r'(?:\d+\s*(?:responses?|хариулт)|(?:view results|үр дүн харах))',line,re.I):continue
+        m=label_re.match(line)
+        if m and m.group(1).isdigit() and not numbered:m=None
         if m:
-            label=mapping.get(m.group(1).upper(),m.group(1).upper())
-            if label not in 'ABCD' or label in options:raise ValueError('Нэг асуулт, A–D дөрвөн сонголтыг бүтнээр нь сонгоно уу.')
-            current=label;options[label]=m.group(2).strip()
-        elif current:options[current]+=' '+line
-        else:question.append(line)
-    if set(options)!=set('ABCD') or any(not v.strip() for v in options.values()):raise ValueError('A–D сонголт дутуу эсвэл танигдсангүй. OCR хэсгээ томруулна уу.')
+            original=m.group(1).upper()
+            label='ABCD'[int(original)-1] if original.isdigit() else mapping.get(original,original)
+            value=m.group(2).strip()
+        elif len(bullet_rows)==4 and index in bullet_rows:
+            label='ABCD'[bullet_index];bullet_index+=1;value=re.sub(r'^[○◯●◉□☐☑•]\s+','',line)
+        else:
+            if current:options[current]+=' '+line
+            else:question.append(line)
+            continue
+        if label in options:raise ValueError('Олон асуулт эсвэл давхар сонголт байна. Нэг асуултын хэсгийг сонгоно уу.')
+        options[label]=value;current=label
+    if set(options)!=set('ABCD') or any(not v.strip() for v in options.values()):
+        raise ValueError('Текст уншигдсан ч 4 сонголт бүрэн ялгарсангүй. Уншсан текстийг засах товчоор шалгаж болно.')
     if not question or len(' '.join(question))<5:raise ValueError('Асуултын текст дутуу байна.')
-    if len(raw)>6000:raise ValueError('Хэт их текст байна. Нэг асуултаар хүрээлнэ үү.')
     return Quiz(' '.join(question),{k:options[k].strip() for k in 'ABCD'})
 
 def validate_suggestion(value):

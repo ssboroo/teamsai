@@ -26,3 +26,18 @@ class QuizTests(unittest.TestCase):
             self.assertIn('Хариулт: B',answer);self.assertIn('моделийн өөрийн үнэлгээ',answer)
             payload=json.loads(opener.open.call_args.args[0].data);self.assertIn('response_format',payload)
             self.assertLessEqual(opener.open.call_args.kwargs['timeout'],2)
+
+    def test_labels_without_punctuation_and_standalone(self):
+        for raw in [RAW.replace('.',')'), RAW.replace('.',''), RAW.replace('. ','\n')]:
+            self.assertEqual(parse_quiz(raw).options['B'],'Улаанбаатар')
+    def test_numbered_and_radio_choices(self):
+        for labels in [('1.','2.','3.','4.'),('○','○','○','○'),('А.','Б.','В.','Г.')]:
+            raw=RAW
+            for old,new in zip(('A.','B.','C.','D.'),labels):raw=raw.replace(old,new)
+            self.assertEqual(parse_quiz(raw).options['B'],'Улаанбаатар')
+    def test_identity_preserves_math_and_negation(self):
+        from quiz import quiz_identity
+        self.assertEqual(quiz_identity('ТЕСТ  байна'),quiz_identity('тест байна'))
+        self.assertNotEqual(quiz_identity('2 + 2'),quiz_identity('2 - 2'))
+        self.assertNotEqual(quiz_identity('зөв'),quiz_identity('зөв биш'))
+

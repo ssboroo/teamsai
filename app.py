@@ -5,7 +5,7 @@ from history import AnswerHistory
 from reading import readable_text,answer_question
 from core import clean, Deduper, LawIndex, local_chat
 from runtime import Engine, ROOT, tesseract
-from quiz import parse_quiz, suggest_quiz
+from quiz import parse_quiz, suggest_quiz, quiz_identity
 from providers import PROVIDERS, DEFAULT_MODELS, CredentialStore, CloudEngine, cloud_ssl_context
 DATA=(Path.home()/'Library/Application Support/TeamsAI') if sys.platform=='darwin' else Path(os.environ.get('LOCALAPPDATA',str(Path.home())))/'TeamsAI';DATA.mkdir(parents=True,exist_ok=True);(DATA/'laws').mkdir(exist_ok=True)
 BG='#10151f';CARD='#1b2331';FG='#ecf2ff';MUTED='#a6b5cc';ACCENT='#74ebc2'
@@ -98,7 +98,7 @@ class App:
                     if text:
                         if self.answer_busy:self.status.set(f'AI боловсруулж байна • {time.monotonic()-self.started:.1f}с / зорилт 10с • Шинэ асуултыг хянаж байна')
                         else:self.status.set(f'OCR {confidence:.0f}% • {elapsed:.1f}с • Хяналт идэвхтэй')
-                    stable=text==self.last
+                    stable=bool(text) and quiz_identity(text)==quiz_identity(self.last)
                     if text and not stable:
                         self.candidate_started=time.monotonic()-elapsed
                         self.choice.set('Шинэ асуулт…');self.answer.delete('1.0','end')
@@ -233,7 +233,7 @@ class App:
                 try:image=grab(mode,box,hwnd)
                 finally:
                     if sys.platform=='darwin' and mode=='screen':self.q.put(('show',None,epoch))
-                text,confidence=recognize(image,tesseract(),budget=6,quiz_mode=True)
+                text,confidence=recognize(image,tesseract(),budget=10,quiz_mode=True)
                 return clean(text),confidence,time.monotonic()-t
             if sys.platform=='darwin' and mode=='screen':
                 self.busy=True;self.root.withdraw();self.root.after(180,lambda:self.worker('ocr',capture,epoch))
@@ -361,7 +361,7 @@ def self_test():
         result=suggest_quiz(quiz,engine,[],time.monotonic()+120)
         if 'Хариулт: B' not in result or 'Итгэлцэл:' not in result:raise RuntimeError('Structured quiz smoke failed')
         direct=answer_question('Монгол Улсын нийслэл юу вэ?',engine,[],time.monotonic()+120)
-        if 'улаанбаатар' not in direct.casefold():raise RuntimeError('Open question smoke failed: '+direct[:1000])
+        if not any(name in direct.casefold() for name in ('улаанбаатар','ulaanbaatar','ulan bator')):raise RuntimeError('Open question smoke failed: '+direct[:1000])
     finally:engine.stop()
     print('Bundled OCR and AI smoke passed')
 if __name__=='__main__':
