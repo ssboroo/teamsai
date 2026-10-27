@@ -49,7 +49,12 @@ def recognize(image, command, budget=6, quiz_mode=False):
     image=image.copy()
     image.thumbnail((2200,2200))
     def variants():
-        yield image,6
+        # Normalize dark UI before the first pass, not only after a failure.
+        from PIL import ImageStat
+        if ImageStat.Stat(image.convert('L').resize((32,32))).median[0]<128:
+            primary=ImageOps.invert(ImageOps.autocontrast(ImageOps.grayscale(image)))
+        else:primary=image
+        yield primary,6
         gray=ImageOps.autocontrast(ImageOps.grayscale(image))
         if gray.resize((1,1)).getpixel((0,0))<128:gray=ImageOps.invert(gray)
         scale=min(2,2800/max(image.size))
