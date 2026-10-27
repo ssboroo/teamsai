@@ -41,21 +41,3 @@ class QuizTests(unittest.TestCase):
         self.assertNotEqual(quiz_identity('2 + 2'),quiz_identity('2 - 2'))
         self.assertNotEqual(quiz_identity('зөв'),quiz_identity('зөв биш'))
 
-class FreeQuestionTests(unittest.TestCase):
-    def test_no_options_are_required(self):
-        from quiz import normalize_question
-        self.assertEqual(normalize_question('Монгол Улсын нийслэл аль вэ?'),'Монгол Улсын нийслэл аль вэ?')
-        with self.assertRaises(ValueError):normalize_question('...')
-    def test_free_question_local_response(self):
-        from quiz import suggest_question
-        engine=MagicMock(endpoint='http://127.0.0.1:1234/v1/chat/completions',key='fixture')
-        response=MagicMock();response.__enter__.return_value.read.return_value=json.dumps({'choices':[{'message':{'content':json.dumps({'answer':'Улаанбаатар.'})}}]}).encode()
-        opener=MagicMock();opener.open.return_value=response
-        with patch('quiz.build_opener',return_value=opener):
-            answer=suggest_question('Монгол Улсын нийслэл аль вэ?',engine,[],time.monotonic()+10)
-        self.assertEqual(answer,'Хариулт: Улаанбаатар.')
-        payload=json.loads(opener.open.call_args.args[0].data)
-        self.assertIn('answer',payload['response_format']['schema']['properties'])
-    def test_free_question_rejects_remote_local_endpoint(self):
-        from quiz import suggest_question
-        with self.assertRaises(ValueError):suggest_question('Асуултын текст',MagicMock(endpoint='https://other.example'),[],time.monotonic()+10)

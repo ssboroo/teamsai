@@ -2,9 +2,10 @@ import ctypes, json, os, queue, re, sys, threading, time, tkinter as tk
 from tkinter import filedialog, messagebox
 from pathlib import Path
 from history import AnswerHistory
+from reading import readable_text,answer_question
 from core import clean, Deduper, LawIndex, local_chat
 from runtime import Engine, ROOT, tesseract
-from quiz import parse_quiz, suggest_quiz, quiz_identity, normalize_question, suggest_question
+from quiz import parse_quiz, suggest_quiz, quiz_identity
 from providers import PROVIDERS, DEFAULT_MODELS, CredentialStore, CloudEngine, cloud_ssl_context
 DATA=(Path.home()/'Library/Application Support/TeamsAI') if sys.platform=='darwin' else Path(os.environ.get('LOCALAPPDATA',str(Path.home())))/'TeamsAI';DATA.mkdir(parents=True,exist_ok=True);(DATA/'laws').mkdir(exist_ok=True)
 BG='#10151f';CARD='#1b2331';FG='#ecf2ff';MUTED='#a6b5cc';ACCENT='#74ebc2'
@@ -23,7 +24,7 @@ class App:
         self.models=dict(DEFAULT_MODELS)
         if isinstance(self.settings.get('models'),dict):self.models.update({k:v for k,v in self.settings['models'].items() if k in DEFAULT_MODELS and isinstance(v,str) and re.fullmatch(r'[A-Za-z0-9_.:-]{1,120}',v)})
         self.interval=tk.IntVar(value=interval);self.general=tk.BooleanVar(value=bool(self.settings.get('allow_general',True)))
-        self.label('BORO',24,ACCENT).grid(row=0,column=0,sticky='w',padx=22,pady=(10,2));self.label('Монгол асуулт → сонголт → таны шийдвэр',10,MUTED).grid(row=1,column=0,sticky='w',padx=22)
+        self.label('BORO',24,ACCENT).grid(row=0,column=0,sticky='w',padx=22,pady=(10,2));self.label('Асуултаа харуул эсвэл бич → товч хариулт',10,MUTED).grid(row=1,column=0,sticky='w',padx=22)
         controls=tk.Frame(root,bg=BG);controls.grid(row=2,column=0,sticky='ew',padx=22,pady=8)
         self.button(controls,'① Хэсэг сонгох',self.select).pack(side='left',fill='x',expand=True,padx=(0,8))
         self.start_button=self.button(controls,'▶ Эхлэх',self.toggle);self.start_button.pack(side='left',fill='x',expand=True)
@@ -47,7 +48,7 @@ class App:
         self.history_list.tag_configure('heading',foreground=ACCENT,font=('Segoe UI',10,'bold'))
         self.refresh_history()
         footer=tk.Frame(root,bg=BG);self.footer=footer;footer.grid(row=12,column=0,sticky='ew',padx=22,pady=8)
-        self.button(footer,'Хуулах',self.copy).pack(side='left');self.button(footer,'Текст засах',self.correct_text).pack(side='left',padx=6);self.button(footer,'Тохиргоо',self.options).pack(side='right')
+        self.button(footer,'Хуулах',self.copy).pack(side='left');self.button(footer,'Текстээр асуух',self.ask_text).pack(side='left',padx=6);self.button(footer,'Тохиргоо',self.options).pack(side='right')
         self.privacy_notice=tk.StringVar(value=self.provider_notice())
         tk.Label(root,textvariable=self.privacy_notice,bg=BG,fg=MUTED,font=('Segoe UI',9)).grid(row=13,column=0,sticky='ew',padx=22,pady=(0,8))
         try:
@@ -68,7 +69,7 @@ class App:
             with p.open('a',encoding='utf-8') as f:f.write(json.dumps(dict(time=time.time(),event=event,**data))+'\n')
         except OSError:pass
     def worker(self,tag,fn,epoch=None):
-        if tag=='answer':self.answer_busy=True
+        if tag in ('answer','manual_answer'):self.answer_busy=True
         else:self.busy=True
         def run():
             try:self.q.put((tag,fn(),epoch))
@@ -80,17 +81,17 @@ class App:
             if tag=='show':
                 self.root.deiconify();self.root.after(100,self.drain);return
             stage=value[0] if tag=='error' else tag
-            if stage=='answer':self.answer_busy=False;self.manual_input=False
+            if stage in ('answer','manual_answer'):self.answer_busy=False
             else:self.busy=False
             if tag=='ready':self.ready=True;self.status.set('Бэлэн. Асуултын хэсгээ сонгоод Эхлэх дарна уу.')
             elif tag=='connection':self.status.set(value+' API холболтын хариу ирлээ.');self.audit('connection_test',provider=value)
             elif tag=='error':
                 if epoch is None or epoch==self.generation:
                     self.status.set('Алдаа: '+value[2]+(' • Хяналт үргэлжилж байна' if self.running else ''));self.candidate_started=0;self.audit('error',stage=value[0],kind=value[1])
-            elif epoch==self.generation and self.running:
+            elif epoch==self.generation and (self.running or tag=='manual_answer'):
                 if tag=='ocr':
                     text,confidence,elapsed=value;raw_text=text
-                    try:text=normalize_question(text)
+                    try:text=readable_text(text)
                     except ValueError as exc:
                         self.status.set('OCR: '+str(exc));text=''
                     self.question.delete('1.0','end');self.question.insert('1.0',text or raw_text)
@@ -103,18 +104,18 @@ class App:
                         self.choice.set('Шинэ асуулт…');self.answer.delete('1.0','end')
                     self.last=text
                     hit,key=self.dedup.check(text)
-                    self.pending=(text,confidence,self.candidate_started) if stable and text and confidence>=70 else None
+                    self.pending=(text,confidence,self.candidate_started) if stable and text and confidence>=45 else None
                     if self.pending and not hit and not self.answer_busy:
                         self.start_pending(epoch)
                     elif hit and key in self.results and not self.answer_busy:self.display_answer(*self.results[key],cached=True)
-                    elif confidence<70:self.status.set('Текст бүдэг байна. Хэсгийг томруулж дахин сонгоно уу.')
-                elif tag=='answer':
+                    elif confidence<45:self.status.set('Текст бүдэг • Дахин уншиж байна • Текстээр асуух боломжтой')
+                elif tag in ('answer','manual_answer'):
                     answer,refs,key,elapsed,question=value
                     self.history.add(question,answer,refs,elapsed);self.refresh_history()
                     self.dedup.seen[key]=time.monotonic()
                     self.results[key]=(answer,refs,elapsed)
                     if len(self.results)>100:self.results.pop(next(iter(self.results)))
-                    if quiz_identity(self.last)==quiz_identity(question):self.display_answer(answer,refs,elapsed)
+                    if self.last==question:self.display_answer(answer,refs,elapsed)
                     if self.history.save_error:self.status.set('Санал бэлэн • Түүхийг дискэнд хадгалж чадсангүй • Хяналт үргэлжилж байна')
                     self.audit('answer',poll_hash=key,seconds=round(elapsed,2))
                     self.start_pending(epoch)
@@ -122,9 +123,9 @@ class App:
         self.root.after(100,self.drain)
     def display_answer(self,answer,refs,elapsed,cached=False):
         match=re.search(r'Хариулт\s*[:：]\s*([^\n]+)',answer,re.I)
-        self.choice.set((match.group(1).split(' — ',1)[0]) if match and re.match(r'^[A-D] — ',match.group(1)) else 'Хариулт')
+        self.choice.set((match.group(1).split(' — ',1)[0][:80]) if match else 'Саналыг уншина уу')
         self.answer.delete('1.0','end');self.answer.insert('1.0',answer+'\n\n'+'\n\n'.join(f'[{i+1}] {r["title"]} {r["article"]}\n{r["text"]}\n{r["source"]} • {r["verified_on"]}' for i,r in enumerate(refs)))
-        self.status.set('Өмнөх санал • Дараагийн асуултыг хүлээж байна' if cached else f'Санал бэлэн • OCR + AI {elapsed:.1f}с • Хяналт үргэлжилж байна')
+        self.status.set(('Өмнөх санал' if cached else f'Хариулт бэлэн • {elapsed:.1f}с')+(' • Хяналт үргэлжилж байна' if self.running else ''))
     def start_pending(self,epoch):
         pending=getattr(self,'pending',None)
         if not pending or self.answer_busy or not self.running or epoch!=self.generation:return
@@ -142,11 +143,39 @@ class App:
         def infer():
             refs=LawIndex(DATA/'laws').search(text)
             if not refs and not general:raise ValueError('Хуулийн сан дутуу. Сан нэмэх эсвэл ерөнхий санал зөвшөөрнө үү.')
-            try:quiz=parse_quiz(text)
-            except ValueError:quiz=None
-            answer=suggest_quiz(quiz,target,refs,deadline) if quiz else suggest_question(text,target,refs,deadline)
+            answer=answer_question(text,target,refs,deadline)
+            if confidence<70:answer+="\n\nOCR уншилт эргэлзээтэй — асуултын эх текстийг нягтална уу."
             return answer,refs,key,time.monotonic()-started,text
         self.worker('answer',infer,epoch)
+
+    def ask_text(self):
+        if self.answer_busy:self.status.set('Одоогийн хариу дуусмагц текстээр асууж болно.');return
+        if not self.ready:self.status.set('AI ачаалж дуустал хүлээнэ үү.');return
+        if self.running:self.toggle()
+        from tkinter.scrolledtext import ScrolledText
+        w=tk.Toplevel(self.root);w.title('Текстээр асуух');w.geometry('560x420');w.configure(bg=BG);w.transient(self.root);w.grab_set()
+        tk.Label(w,text='Асуултаа бичих / хуулж тавих / OCR текстийг засах',bg=BG,fg=FG).pack(pady=10)
+        field=ScrolledText(w,wrap='word',font=('Segoe UI',12),bg=CARD,fg=FG,insertbackground=FG)
+        field.pack(fill='both',expand=True,padx=12);field.insert('1.0',self.question.get('1.0','end').strip());field.focus_set()
+        provider=self.provider.get()
+        notice='Зөвхөн таны компьютерт боловсруулна.' if provider=='local' else PROVIDERS[provider]+' руу текст болон хуулийн эх илгээнэ; API төлбөр/лимит үйлчилнэ.'
+        tk.Label(w,text=notice,bg=BG,fg=MUTED,wraplength=520).pack(padx=12,pady=8)
+        def submit():
+            try:
+                text=readable_text(field.get('1.0','end'))
+                target=self.engine if provider=='local' else CloudEngine(provider,self.models[provider])
+                if provider!='local' and not CredentialStore.get(provider):raise ValueError('Тохиргоонд API түлхүүрээ хадгална уу.')
+            except (ValueError,RuntimeError) as exc:messagebox.showerror('Асуулт',str(exc),parent=w);return
+            self.generation+=1;epoch=self.generation;self.last=text;self.pending=None
+            self.question.delete('1.0','end');self.question.insert('1.0',text)
+            _,key=self.dedup.check(text);started=time.monotonic();general=self.general.get()
+            def infer():
+                refs=LawIndex(DATA/'laws').search(text)
+                if not refs and not general:raise ValueError('Хуулийн сан дутуу. Ерөнхий санал зөвшөөрөх эсвэл сан нэмнэ үү.')
+                return answer_question(text,target,refs,started+30),refs,key,time.monotonic()-started,text
+            w.destroy();self.status.set('Хариулж байна…');self.worker('manual_answer',infer,epoch)
+        self.button(w,'Хариулах',submit).pack(pady=10)
+        w.after(200,lambda:__import__('capture').exclude_window(w))
 
     def refresh_history(self):
         view=self.history_list.yview()
@@ -195,8 +224,6 @@ class App:
         self.running=True;self.generation+=1;self.last='';self.pending=None;self.start_button.config(text='■ Зогсоох');self.tick(self.generation)
     def tick(self,epoch):
         if not self.running or epoch!=self.generation:return
-        if getattr(self,'manual_input',False):
-            self.root.after(200,lambda:self.tick(epoch));return
         if not self.busy:
             box=self.region;mode=self.mode.get();hwnd=self.hwnd
             def capture():
@@ -212,23 +239,6 @@ class App:
                 self.busy=True;self.root.withdraw();self.root.after(180,lambda:self.worker('ocr',capture,epoch))
             else:self.worker('ocr',capture,epoch)
         self.root.after(200 if self.busy else max(1,self.interval.get())*1000,lambda:self.tick(epoch))
-    def correct_text(self):
-        if self.running:self.toggle()
-        w=tk.Toplevel(self.root);w.title('BORO • Уншсан текстийг засах');w.geometry('620x520');w.configure(bg=BG)
-        tk.Label(w,text='Асуултаа шалгаж засна уу.\nСонголтгүй энгийн асуулт ч оруулж болно.',bg=BG,fg=FG,justify='left').pack(padx=14,pady=12)
-        from tkinter.scrolledtext import ScrolledText
-        editor=ScrolledText(w,wrap='word',font=('Segoe UI',12));editor.pack(fill='both',expand=True,padx=14)
-        editor.insert('1.0',self.question.get('1.0','end').strip())
-        def apply():
-            try:text=normalize_question(editor.get('1.0','end'))
-            except ValueError as exc:messagebox.showerror('Текст',str(exc),parent=w);return
-            if self.answer_busy or self.busy:messagebox.showinfo('Хүлээнэ үү','Өмнөх уншилт дуусмагц дахин дарна уу.',parent=w);return
-            w.destroy();self.manual_input=True;self.toggle()
-            if not self.running:self.manual_input=False;return
-            self.last=text;self.question.delete('1.0','end');self.question.insert('1.0',text)
-            self.pending=(text,100,time.monotonic());self.start_pending(self.generation)
-        self.button(w,'Зассан асуултыг боловсруулах',apply).pack(pady=12)
-
     def copy(self):
         text=self.answer.get('1.0','end').strip()
         if text and messagebox.askyesno('Хуулах','Саналыг нягталсан уу? Clipboard-д хуулах уу?'):self.root.clipboard_clear();self.root.clipboard_append(text)
@@ -350,6 +360,8 @@ def self_test():
         quiz=parse_quiz('2 + 2 хэд вэ?\nA. 3\nB. 4\nC. 5\nD. 6')
         result=suggest_quiz(quiz,engine,[],time.monotonic()+120)
         if 'Хариулт: B' not in result or 'Итгэлцэл:' not in result:raise RuntimeError('Structured quiz smoke failed')
+        direct=answer_question('Монгол Улсын нийслэл юу вэ?',engine,[],time.monotonic()+120)
+        if 'улаанбаатар' not in direct.casefold():raise RuntimeError('Open question smoke failed: '+direct[:1000])
     finally:engine.stop()
     print('Bundled OCR and AI smoke passed')
 if __name__=='__main__':
@@ -357,6 +369,7 @@ if __name__=='__main__':
         try:self_test()
         except Exception as exc:
             (DATA/'self-test-error.txt').write_text(type(exc).__name__+': '+str(exc),encoding='utf-8')
+            if sys.stderr:print(type(exc).__name__+': '+str(exc),file=sys.stderr)
             sys.exit(1)
     else:
         if os.name=='nt':ctypes.windll.user32.SetProcessDPIAware()
