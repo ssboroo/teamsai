@@ -361,7 +361,7 @@ def self_test():
         result=suggest_quiz(quiz,engine,[],time.monotonic()+120)
         if 'Хариулт: B' not in result or 'Итгэлцэл:' not in result:raise RuntimeError('Structured quiz smoke failed')
         direct=answer_question('Монгол Улсын нийслэл юу вэ?',engine,[],time.monotonic()+120)
-        if 'улаанбаатар' not in direct.casefold():raise RuntimeError('Open question smoke failed')
+        if 'улаанбаатар' not in direct.casefold():raise RuntimeError('Open question smoke failed: '+direct[:1000])
     finally:engine.stop()
     print('Bundled OCR and AI smoke passed')
 if __name__=='__main__':
@@ -369,6 +369,7 @@ if __name__=='__main__':
         try:self_test()
         except Exception as exc:
             (DATA/'self-test-error.txt').write_text(type(exc).__name__+': '+str(exc),encoding='utf-8')
+            if sys.stderr:print(type(exc).__name__+': '+str(exc),file=sys.stderr)
             sys.exit(1)
     else:
         if os.name=='nt':ctypes.windll.user32.SetProcessDPIAware()
