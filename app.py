@@ -4,6 +4,7 @@ from pathlib import Path
 from core import clean, Deduper, LawIndex, local_chat
 from runtime import Engine, ROOT, tesseract
 from quiz import parse_quiz, suggest_quiz
+from providers import PROVIDERS, DEFAULT_MODELS, CredentialStore, CloudEngine, cloud_ssl_context
 DATA=(Path.home()/'Library/Application Support/TeamsAI') if sys.platform=='darwin' else Path(os.environ.get('LOCALAPPDATA',str(Path.home())))/'TeamsAI';DATA.mkdir(parents=True,exist_ok=True);(DATA/'laws').mkdir(exist_ok=True)
 BG='#10151f';CARD='#1b2331';FG='#ecf2ff';MUTED='#a6b5cc';ACCENT='#74ebc2'
 class App:
@@ -15,7 +16,10 @@ class App:
         if not isinstance(self.settings,dict):self.settings={}
         try:interval=max(1,min(30,int(self.settings.get('interval',3))))
         except (TypeError,ValueError):interval=3
-        self.interval=tk.IntVar(value=interval);self.general=tk.BooleanVar(value=True)
+        self.provider=tk.StringVar(value=self.settings.get('provider','local') if self.settings.get('provider') in PROVIDERS else 'local')
+        self.models=dict(DEFAULT_MODELS)
+        if isinstance(self.settings.get('models'),dict):self.models.update({k:v for k,v in self.settings['models'].items() if k in DEFAULT_MODELS and isinstance(v,str) and re.fullmatch(r'[A-Za-z0-9_.:-]{1,120}',v)})
+        self.interval=tk.IntVar(value=interval);self.general=tk.BooleanVar(value=bool(self.settings.get('allow_general',True)))
         self.label('BORO',24,ACCENT).pack(anchor='w',padx=22,pady=(14,2));self.label('Монгол асуулт → сонголт → таны шийдвэр',10,MUTED).pack(anchor='w',padx=22)
         controls=tk.Frame(root,bg=BG);controls.pack(fill='x',padx=22,pady=10)
         self.button(controls,'① Хэсэг сонгох',self.select).pack(side='left',fill='x',expand=True,padx=(0,8))
@@ -34,14 +38,16 @@ class App:
         self.answer=self.text(5);self.answer.pack(fill='both',expand=True,padx=22)
         footer=tk.Frame(root,bg=BG);self.footer=footer;footer.pack(fill='x',padx=22,pady=12)
         self.button(footer,'Хуулах',self.copy).pack(side='left');self.button(footer,'Тохиргоо',self.options).pack(side='right')
-        self.label('Локал • API түлхүүргүй • Teams-д өөрөө илгээнэ',9,MUTED).pack(pady=(0,12))
+        self.privacy_notice=tk.StringVar(value=self.provider_notice())
+        tk.Label(root,textvariable=self.privacy_notice,bg=BG,fg=MUTED,font=('Segoe UI',9)).pack(pady=(0,12))
         try:
             from PIL import Image,ImageTk
             self.logo=ImageTk.PhotoImage(Image.open(ROOT/'branding/boro.png').resize((64,64)));root.iconphoto(True,self.logo)
         except (OSError,tk.TclError):pass
         root.after(400,self.exclude_capture)
         root.after(100,self.drain);root.protocol('WM_DELETE_WINDOW',self.close)
-        self.worker('ready',lambda:self.engine.start())
+        initial_local=self.provider.get()=='local'
+        self.worker('ready',lambda:self.engine.start() if initial_local else None)
     def label(self,text,size=11,color=FG):return tk.Label(self.root,text=text,bg=BG,fg=color,font=('Segoe UI',size,'bold' if size>15 else 'normal'))
     def text(self,height):return tk.Text(self.root,height=height,bg=CARD,fg=FG,insertbackground=FG,relief='flat',wrap='word',font=('Segoe UI',11),padx=10,pady=10)
     def button(self,parent,text,fn):return tk.Button(parent,text=text,command=fn,bg=CARD,fg=FG,activebackground='#2d4057',activeforeground=FG,relief='flat',padx=12,pady=10,font=('Segoe UI',10),cursor='hand2')
@@ -64,6 +70,7 @@ class App:
                 self.root.deiconify();self.root.after(100,self.drain);return
             self.busy=False
             if tag=='ready':self.ready=True;self.status.set('Бэлэн. Асуултын хэсгээ сонгоод Эхлэх дарна уу.')
+            elif tag=='connection':self.status.set(value+' API холболтын хариу ирлээ.');self.audit('connection_test',provider=value)
             elif tag=='error':
                 if epoch is None or epoch==self.generation:
                     self.status.set('Алдаа: '+value[2]);self.audit('error',stage=value[0],kind=value[1])
@@ -83,11 +90,11 @@ class App:
                     hit,key=self.dedup.check(text)
                     if stable and confidence>=70 and len(text)>12 and not hit and time.monotonic()>self.failures.get(key,0):
                         self.failures[key]=time.monotonic()+60;self.started=self.candidate_started or time.monotonic()-elapsed
-                        general=self.general.get();self.status.set('Хариу боловсруулж байна…')
+                        general=self.general.get();target=self.engine if self.provider.get()=='local' else CloudEngine(self.provider.get(),self.models[self.provider.get()]);self.status.set('Хариу боловсруулж байна…')
                         def infer():
                             refs=LawIndex(DATA/'laws').search(text)
                             if not refs and not general:raise ValueError('Хуулийн сан дутуу. Сан нэмэх эсвэл ерөнхий санал зөвшөөрнө үү.')
-                            answer=suggest_quiz(parse_quiz(text),self.engine,refs,self.started+30)
+                            answer=suggest_quiz(parse_quiz(text),target,refs,self.started+30)
                             return answer,refs,key,time.monotonic()-self.started
                         self.worker('answer',infer,epoch)
                     elif hit and key in self.results:self.display_answer(*self.results[key],cached=True)
@@ -131,7 +138,13 @@ class App:
         if self.mode.get()=='window' and not self.hwnd:self.capture_options();return
         if self.mode.get()=='screen' and not self.capture_excluded:
             self.status.set('Энэ Windows дээр өөрийн цонхыг OCR-оос хасаж чадсангүй. Хэсэг/цонх горим ашиглана уу.');return
-        if not messagebox.askyesno('Дэлгэц унших','Сонгосон дэлгэц/цонх/хэсгийг локал OCR болон AI-аар давтан боловсруулж хариу харуулах уу?'):return
+        provider=self.provider.get()
+        if provider!='local':
+            try:
+                if not CredentialStore.get(provider):self.status.set('Settings-д API түлхүүрээ хадгална уу.');return
+            except RuntimeError as exc:self.status.set(str(exc));return
+        consent='Сонгосон дэлгэц/цонх/хэсгийг локал OCR болон AI-аар давтан боловсруулж хариу харуулах уу?' if provider=='local' else f'{PROVIDERS[provider]} руу OCR асуулт, A–D сонголт болон олдсон хуулийн заалтыг илгээнэ. Зураг илгээхгүй. Үйлчилгээний төлбөр/лимит үйлчилнэ. Энэ хяналтын хугацаанд зөвшөөрөх үү?'
+        if not messagebox.askyesno('Боловсруулах зөвшөөрөл',consent):return
         self.running=True;self.generation+=1;self.last='';self.start_button.config(text='■ Зогсоох');self.tick(self.generation)
     def tick(self,epoch):
         if not self.running or epoch!=self.generation:return
@@ -144,7 +157,7 @@ class App:
                 try:image=grab(mode,box,hwnd)
                 finally:
                     if sys.platform=='darwin' and mode=='screen':self.q.put(('show',None,epoch))
-                text,confidence=recognize(image,tesseract())
+                text,confidence=recognize(image,tesseract(),quiz_mode=True)
                 return clean(text),confidence,time.monotonic()-t
             if sys.platform=='darwin' and mode=='screen':
                 self.busy=True;self.root.withdraw();self.root.after(180,lambda:self.worker('ocr',capture,epoch))
@@ -173,12 +186,73 @@ class App:
             if selection:
                 hwnd,title=rows[selection[0]];choose('window',title[:24],hwnd)
         self.button(w,'Цонх сонгох',select_window).pack(pady=8)
+    def provider_notice(self):
+        return 'Локал • Офлайн • Teams-д өөрөө илгээнэ' if self.provider.get()=='local' else PROVIDERS[self.provider.get()]+' • OCR текст cloud руу илгээгдэнэ'
+    def save_settings(self):
+        settings={'interval':self.interval.get(),'provider':self.provider.get(),'models':self.models,'allow_general':self.general.get()}
+        (DATA/'settings.json').write_text(json.dumps(settings),encoding='utf-8')
     def options(self):
-        w=tk.Toplevel(self.root);w.title('Тохиргоо');w.configure(bg=BG);w.geometry('380x230')
-        tk.Label(w,text='Дэлгэц унших завсар (секунд)',bg=BG,fg=FG).pack(pady=10)
+        if self.busy:self.status.set('Одоогийн ажиллагаа дууссаны дараа Settings нээнэ үү.');return
+        if self.running:self.toggle()
+        from tkinter import ttk
+        w=tk.Toplevel(self.root);w.title('BORO • Settings');w.configure(bg=BG);w.geometry('460x660');w.transient(self.root);w.grab_set()
+        selected=tk.StringVar(value=self.provider.get());model=tk.StringVar();key=tk.StringVar();saved=tk.StringVar()
+        tk.Label(w,text='AI үйлчилгээ',bg=BG,fg=FG).pack(pady=(14,4))
+        selector=ttk.Combobox(w,values=list(PROVIDERS),state='readonly',textvariable=selected);selector.pack(fill='x',padx=20)
+        tk.Label(w,text='local = офлайн • gemini / openai / grok = API',bg=BG,fg=MUTED).pack(pady=4)
+        tk.Label(w,text='Моделийн нэр (өөрчилж болно)',bg=BG,fg=FG).pack()
+        model_entry=ttk.Entry(w,textvariable=model);model_entry.pack(fill='x',padx=20,pady=4)
+        tk.Label(w,text='API түлхүүр — хоосон үлдээвэл өмнөхийг хадгална',bg=BG,fg=FG).pack(pady=(8,4))
+        key_entry=ttk.Entry(w,textvariable=key,show='•');key_entry.pack(fill='x',padx=20)
+        tk.Label(w,textvariable=saved,bg=BG,fg=MUTED,wraplength=420).pack(pady=5)
+        def refresh(*_):
+            provider=selected.get();key.set('');model.set(self.models.get(provider,''))
+            key_entry.configure(state='disabled' if provider=='local' else 'normal');model_entry.configure(state='disabled' if provider=='local' else 'normal')
+            if provider=='local':saved.set('API түлхүүр хэрэггүй.')
+            else:
+                try:saved.set('OS-ийн санд түлхүүр хадгалагдсан.' if CredentialStore.get(provider) else 'Түлхүүр хараахан хадгалаагүй.')
+                except RuntimeError as exc:saved.set(str(exc))
+        selector.bind('<<ComboboxSelected>>',refresh);refresh()
+        def save():
+            provider=selected.get()
+            try:
+                if provider!='local':
+                    CloudEngine(provider,model.get().strip())
+                    if key.get().strip():CredentialStore.set(provider,key.get());key.set('')
+                    self.models[provider]=model.get().strip()
+                self.provider.set(provider);self.privacy_notice.set(self.provider_notice());self.results.clear();self.dedup=Deduper();self.generation+=1;self.save_settings()
+                if provider=='local' and (not self.engine.process or self.engine.process.poll() is not None):
+                    self.engine=Engine();self.ready=False;self.worker('ready',self.engine.start)
+                else:
+                    if provider!='local':self.engine.stop()
+                    self.ready=True;self.status.set(PROVIDERS[provider]+' сонгогдлоо. Эхлэх товчийг дарна уу.')
+                w.destroy()
+            except (RuntimeError,ValueError,OSError) as exc:messagebox.showerror('Тохиргоо',str(exc),parent=w)
+        def delete():
+            provider=selected.get()
+            if provider!='local' and messagebox.askyesno('Түлхүүр устгах',PROVIDERS[provider]+' түлхүүрийг OS-ийн сангаас устгах уу?',parent=w):
+                try:CredentialStore.delete(provider);refresh()
+                except RuntimeError as exc:messagebox.showerror('Түлхүүр',str(exc),parent=w)
+        def test_connection():
+            provider=selected.get()
+            if provider=='local':saved.set('Локал горимд API холболт хэрэггүй.');return
+            if self.busy:return
+            try:client=CloudEngine(provider,model.get().strip())
+            except ValueError as exc:messagebox.showerror('Модель',str(exc),parent=w);return
+            if not messagebox.askyesno('API шалгах','Хадгалсан түлхүүрээр 2+2 гэсэн зохиомол асуулт илгээнэ. API төлбөр/лимит үйлчилж болно. Үргэлжлүүлэх үү?',parent=w):return
+            def request():
+                q=parse_quiz('2 + 2 хэд вэ?\nA. 3\nB. 4\nC. 5\nD. 6')
+                suggest_quiz(q,client,[],time.monotonic()+20)
+                return PROVIDERS[provider]
+            self.worker('connection',request)
+        self.button(w,'Хадгалсан түлхүүрээр холболт шалгах',test_connection).pack(pady=4)
+        self.button(w,'Хадгалсан түлхүүрийг устгах',delete).pack(pady=5)
+        tk.Label(w,text='Түлхүүр Windows Credential Manager / macOS Keychain-д хадгалагдана. Энгийн файл, audit-д бичихгүй.\nGemini-ийн үнэгүй лимит модель/бүртгэлээс хамаарна. OpenAI/Grok API төлбөртэй байж болно; ChatGPT Plus эрх API биш.',bg=BG,fg=MUTED,wraplength=410,justify='left').pack(padx=20,pady=8)
+        tk.Label(w,text='Дэлгэц унших завсар (секунд)',bg=BG,fg=FG).pack()
         tk.Scale(w,from_=1,to=30,orient='horizontal',variable=self.interval,bg=BG,fg=FG,highlightthickness=0).pack(fill='x',padx=20)
         tk.Checkbutton(w,text='Хуулийн сангүй үед ерөнхий санал',variable=self.general,bg=BG,fg=FG,selectcolor=CARD).pack()
-        self.button(w,'Хуулийн сан нэмэх',self.import_law).pack(pady=10)
+        self.button(w,'Хуулийн сан нэмэх',self.import_law).pack(pady=4)
+        self.button(w,'Хадгалах',save).pack(pady=8)
     def import_law(self):
         path=filedialog.askopenfilename(filetypes=[('Хуулийн сан','*.json')])
         if not path:return
@@ -191,11 +265,13 @@ class App:
         except Exception as e:messagebox.showerror('Алдаа',str(e))
     def close(self):
         self.running=False
-        (DATA/'settings.json').write_text(json.dumps({'interval':self.interval.get()}))
-        self.engine.stop();self.root.destroy()
+        try:self.save_settings()
+        finally:self.engine.stop();self.root.destroy()
 
 def self_test():
     from PIL import Image,ImageDraw,ImageFont
+    CredentialStore.backend() # Native backend import; never accesses/stores a key.
+    if cloud_ssl_context().cert_store_stats()['x509_ca']<1:raise RuntimeError('Bundled CA roots missing')
     from ocr import recognize
     image=Image.new('RGB',(1000,200),'white');draw=ImageDraw.Draw(image)
     font=ImageFont.truetype('/System/Library/Fonts/Supplemental/Arial.ttf' if sys.platform=='darwin' else 'C:/Windows/Fonts/arial.ttf',36)

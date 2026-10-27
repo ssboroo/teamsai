@@ -21,8 +21,8 @@ class QuizTests(unittest.TestCase):
         result={'choice':'B','reason':'Улаанбаатар нь нийслэл.','confidence':'high'}
         response=MagicMock();response.__enter__.return_value.read.return_value=json.dumps({'choices':[{'message':{'content':json.dumps(result)}}]}).encode()
         opener=MagicMock();opener.open.return_value=response
-        with patch('quiz.build_opener',return_value=opener):
-            answer=suggest_quiz(parse_quiz(RAW),engine,[],time.monotonic()+2)
+        with patch('quiz.build_opener',return_value=opener), patch('quiz.time.monotonic',return_value=100.0):
+            answer=suggest_quiz(parse_quiz(RAW),engine,[],102.0)
             self.assertIn('Хариулт: B',answer);self.assertIn('моделийн өөрийн үнэлгээ',answer)
             payload=json.loads(opener.open.call_args.args[0].data);self.assertIn('response_format',payload)
             self.assertLessEqual(opener.open.call_args.kwargs['timeout'],2)

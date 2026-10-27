@@ -1,3 +1,20 @@
+# BORO 1.4 — AI Settings
+
+Settings → AI үйлчилгээ: **local / gemini / openai / grok**. Локал горим анхдагч хэвээр. Cloud ашиглах бол өөрийн үйлчилгээний API түлхүүр, тухайн бүртгэлд нээлттэй моделийн нэрийг оруулж Хадгалах дарна. OpenAI API нь ChatGPT Plus эрхээс тусдаа; Gemini/Grok-ийн тариф, лимит тухайн бүртгэлээс хамаарна. Программ бүх API-г үнэгүй гэж үзэхгүй.
+
+- Түлхүүр Windows Credential Manager эсвэл macOS Keychain-д хадгалагдана. Native vault нээгдэхгүй бол файлд нөөцлөхгүй, алдаа харуулна. Windows/macOS-ийн өөрийн нэвтрэх/зөвшөөрөх цонх гарч болно.
+- API түлхүүрийн талбар масктай; хадгалсан түлхүүрийг дэлгэцэд эргүүлж харуулахгүй. Хоосон үлдээвэл өмнөх түлхүүр хэвээр. Устгах товч зөвхөн сонгосон үйлчилгээний түлхүүрийг устгана.
+- Хадгалсан түлхүүрээр холболт шалгах нь 2+2 гэсэн зохиомол асуултыг зөвшөөрсний дараа илгээнэ. Тариф/лимит хэрэглэгдэж болно. Дэлгэцийн мэдээлэл тест хүсэлтэд орохгүй.
+- Cloud горимд Эхлэх дарахад OCR асуулт, A–D сонголт болон олдсон хуулийн заалт тухайн үйлчилгээ рүү илгээгдэхийг нэг удаа батална. Зураг илгээхгүй. Автоматаар өөр үйлчилгээ/төлбөртэй fallback руу шилжихгүй.
+- Тохиргоо солиход өмнөх саналын cache цэвэрлэгдэнэ. Локал сонголтод буцахад дахин модель ачаалж болно; cloud-оор нээхэд локал модель ачаалахгүй.
+- settings.json/audit-д түлхүүр бичихгүй. API алдааны body/header/key-г хэвлэхгүй; 401/403/404/429-д товч тайлбар харуулна. HTTPS endpoint-үүд тогтмол, redirect зөвшөөрөхгүй. Certifi CA root санг багцалж TLS certificate/hostname шалгалтыг асаалттай байлгана; Mac дээр гаднын Python certificate файл шаардахгүй. Uninstall нь OS-ийн түлхүүрийг автоматаар устгахгүй; устгах бол эхлээд Settings дотроос устгана.
+
+Cloud хүсэлтийн бүтэц, алдаа, redaction, timeout нь mocked HTTP tests-ээр шалгагдана. Бодит Gemini/OpenAI/Grok хүсэлтээр шалгах түлхүүр өгөөгүй тул live API амжилттай холбогдсон гэж үзэхгүй. Windows build дээр native Credential Manager-д жинхэнэ түлхүүр биш test fixture хадгалж/уншиж/устгах шалгалт ажиллана. Mac дээр frozen native Keychain backend импорт шалгана; хэрэглэгчийн Keychain consent/storage болон бодит API-ийг тусад нь шалгах шаардлагатай.
+
+API баримт: https://developers.openai.com/api/docs/guides/structured-outputs ; https://ai.google.dev/gemini-api/docs/generate-content/structured-output ; https://docs.x.ai/developers/model-capabilities/text/structured-outputs . Model нэр Settings-д өөрчлөгдөнө; үйлчилгээний model availability-г өөрийн бүртгэл дээр шалгана.
+
+---
+
 # BORO — Монгол Quiz туслах 1.3
 
 ![BORO](branding/boro-logo.svg)

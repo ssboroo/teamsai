@@ -1,7 +1,7 @@
 [Setup]
 AppId=TeamsAI.Local.Windows
 AppName=BORO
-AppVersion=1.3.0
+AppVersion=1.4.0
 DefaultDirName={localappdata}\Programs\TeamsAI
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
