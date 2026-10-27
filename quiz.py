@@ -44,7 +44,7 @@ def validate_suggestion(value):
 
 def suggest_quiz(quiz,engine,evidence,deadline):
     remaining=deadline-time.monotonic()
-    if remaining<1:raise TimeoutError('30 секундийн хугацаа дууслаа. Дахин уншуулна уу.')
+    if remaining<1:raise TimeoutError('Хариуны хугацаа дууслаа. Автоматаар дахин оролдоно.')
     cloud=isinstance(getattr(engine,'provider',None),str) and engine.provider in ('gemini','openai','grok')
     if not cloud and urlsplit(engine.endpoint).hostname!='127.0.0.1':raise ValueError('Зөвхөн локал AI ашиглана')
     context=[dict(id=i+1,title=r['title'],article=r['article'],text=r['text'][:900]) for i,r in enumerate(evidence[:3])]
@@ -60,7 +60,7 @@ def suggest_quiz(quiz,engine,evidence,deadline):
         req=Request(engine.endpoint,data=json.dumps(payload).encode(),headers={'Content-Type':'application/json','Authorization':'Bearer '+engine.key})
         with build_opener(ProxyHandler({})).open(req,timeout=max(.1,remaining)) as response:raw=response.read(200001)
         if len(raw)>200000:raise ValueError('AI хариу хэт том')
-        if time.monotonic()>deadline:raise TimeoutError('Хариу 30 секундийн зорилтоос хэтэрлээ; санал харуулахгүй.')
+        if time.monotonic()>deadline:raise TimeoutError('Хариу хугацааны төсвөөс хэтэрлээ; дахин оролдоно.')
         content=json.loads(raw)['choices'][0]['message']['content']
     result=validate_suggestion(json.loads(content))
     confidence={'high':'Өндөр','medium':'Дунд','low':'Бага'}[result['confidence']]
