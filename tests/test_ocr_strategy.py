@@ -19,3 +19,19 @@ class OCRStrategyTests(unittest.TestCase):
         mock=types.SimpleNamespace(pytesseract=types.SimpleNamespace(),get_languages=lambda **k:['mon','eng'],Output=types.SimpleNamespace(DICT='dict'),image_to_data=MagicMock(return_value=complete))
         with patch.dict(sys.modules,{'pytesseract':mock}):recognize(Image.new('RGB',(400,300),'white'),'tesseract',quiz_mode=True)
         self.assertEqual(mock.image_to_data.call_count,1)
+
+    def test_timeout_first_pass_recovers_with_sparse_layout(self):
+        complete=data(['2 + 2 хэд вэ?','A. 3','B. 4','C. 5','D. 6'],92)
+        mock=types.SimpleNamespace(pytesseract=types.SimpleNamespace(),get_languages=lambda **k:['mon','eng'],Output=types.SimpleNamespace(DICT='dict'),image_to_data=MagicMock(side_effect=[RuntimeError('Tesseract process timeout'),complete]))
+        with patch.dict(sys.modules,{'pytesseract':mock}):
+            text,confidence=recognize(Image.new('RGB',(400,300),'black'),'tesseract',quiz_mode=True)
+        self.assertIn('D. 6',text)
+        self.assertIn('--psm 11',mock.image_to_data.call_args.kwargs['config'])
+        self.assertGreater(mock.image_to_data.call_args.args[0].getpixel((0,0)),200)
+
+    def test_large_screen_is_bounded_and_fast_pass_skips_fallback(self):
+        complete=data(['2 + 2 хэд вэ?','A. 3','B. 4','C. 5','D. 6'],92)
+        mock=types.SimpleNamespace(pytesseract=types.SimpleNamespace(),get_languages=lambda **k:['mon','eng'],Output=types.SimpleNamespace(DICT='dict'),image_to_data=MagicMock(return_value=complete))
+        with patch.dict(sys.modules,{'pytesseract':mock}),patch('ocr.ImageOps.grayscale',side_effect=AssertionError('unnecessary fallback')):
+            recognize(Image.new('RGB',(5000,3000),'white'),'tesseract',quiz_mode=True)
+        self.assertLessEqual(max(mock.image_to_data.call_args.args[0].size),2200)
