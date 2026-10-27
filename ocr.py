@@ -10,6 +10,11 @@ class QuietSubprocess:
         if name not in ('run','check_output','Popen'):return original
         def hidden(*args,**kwargs):
             kwargs['creationflags']=kwargs.get('creationflags',0) | subprocess.CREATE_NO_WINDOW
+            if hasattr(subprocess,'STARTUPINFO'):
+                startup=kwargs.get('startupinfo') or subprocess.STARTUPINFO()
+                startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startup.wShowWindow=subprocess.SW_HIDE
+                kwargs['startupinfo']=startup
             return original(*args,**kwargs)
         return hidden
 
@@ -27,7 +32,9 @@ def recognize(image, command, budget=6, quiz_mode=False):
     import pytesseract
     pytesseract.pytesseract.tesseract_cmd=command
     configure_subprocess(pytesseract.pytesseract)
-    langs=languages(command,pytesseract.get_languages)
+    try:langs=languages(command,pytesseract.get_languages)
+    except (OSError,RuntimeError) as exc:
+        raise RuntimeError('OCR хөдөлгүүр эхэлсэнгүй. Бүрэн BORO суулгагчаар дахин суулгана уу.') from exc
     if not {'mon','eng'}.issubset(langs): raise RuntimeError('Tesseract mon + eng traineddata суулгаагүй байна.')
     started=time.monotonic(); best=('',0,[])
     def quality(result):
@@ -38,16 +45,25 @@ def recognize(image, command, budget=6, quiz_mode=False):
             except ValueError:complete=False
         return complete,result[1]
     # First pass preserves light/dark UI; second pass boosts small Cyrillic glyphs.
-    gray=ImageOps.grayscale(image)
-    variants=[(image,6),(ImageOps.autocontrast(gray).resize((image.width*2,image.height*2)).filter(ImageFilter.SHARPEN),6)]
-    for im,psm in variants:
+    # Bound full-screen work; prepare fallback only if the fast pass fails.
+    image=image.copy()
+    image.thumbnail((2200,2200))
+    def variants():
+        yield image,6
+        gray=ImageOps.autocontrast(ImageOps.grayscale(image))
+        if gray.resize((1,1)).getpixel((0,0))<128:gray=ImageOps.invert(gray)
+        scale=min(2,2800/max(image.size))
+        yield gray.resize((max(1,int(image.width*scale)),max(1,int(image.height*scale)))).filter(ImageFilter.SHARPEN),11
+    for im,psm in variants():
         remaining=budget-(time.monotonic()-started)
         if remaining<.3: break
         try:
-            d=pytesseract.image_to_data(im,lang='mon+eng',config=f'--oem 1 --psm {psm}',output_type=pytesseract.Output.DICT,timeout=remaining)
-        except RuntimeError:
-            if best[0]: break
-            raise
+            d=pytesseract.image_to_data(im,lang='mon+eng',config=f'--oem 1 --psm {psm}',output_type=pytesseract.Output.DICT,timeout=max(.3,remaining/2) if psm==6 else remaining)
+        except RuntimeError as exc:
+            if 'timeout' not in str(exc).lower():raise
+            if psm==6:continue
+            if best[0]:break
+            raise RuntimeError('OCR хугацаа хэтэрлээ. Бүтэн дэлгэцийн оронд асуултын хэсгийг сонгоно уу; автоматаар дахин оролдоно.') from exc
         lines={}; conf=[]; boxes=[]
         for i,w in enumerate(d['text']):
             c=float(d['conf'][i])

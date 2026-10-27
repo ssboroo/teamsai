@@ -60,3 +60,17 @@ class PipelineTests(unittest.TestCase):
         a=self.app();a.running=False;a.generation=2
         a.q.put(('answer',('Хариулт: A',[],'key',4,'question'),1));a.drain()
         a.history.add.assert_not_called();a.display_answer.assert_not_called()
+
+    def test_pending_question_starts_without_another_capture(self):
+        a=self.app();a.answer_busy=True
+        q='Монгол Улсын нийслэл?\nA. Дархан\nB. Улаанбаатар\nC. Эрдэнэт\nD. Ховд'
+        for _ in range(2):a.q.put(('ocr',(q,95,.1),1));a.drain()
+        a.q.put(('answer',('Хариулт: A',[],'old-key',4,'Хуучин асуулт'),1));a.drain()
+        a.worker.assert_called_once()
+        self.assertEqual(a.active_question,q)
+
+    def test_incomplete_ocr_does_not_erase_previous_answer(self):
+        a=self.app()
+        a.q.put(('ocr',('дутуу текст',90,.1),1));a.drain()
+        a.answer.delete.assert_not_called()
+        a.worker.assert_not_called()
