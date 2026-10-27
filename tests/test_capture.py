@@ -26,6 +26,11 @@ class WindowsCaptureTests(unittest.TestCase):
                 self.assertEqual(app.mode.get(),'region')
                 self.assertTrue(app.footer.winfo_ismapped())
                 self.assertLessEqual(app.footer.winfo_y()+app.footer.winfo_height(),root.winfo_height())
+                root.geometry('520x740');root.update()
+                for widget in (app.footer,app.question,app.answer,app.history_list):
+                    self.assertTrue(widget.winfo_ismapped())
+                    self.assertGreater(widget.winfo_height(),20)
+                    self.assertLessEqual(widget.winfo_rooty()+widget.winfo_height(),root.winfo_rooty()+root.winfo_height())
                 app.capture_options();root.update()
                 self.assertTrue(root.winfo_exists())
                 app.busy=False;app.options();root.update()
